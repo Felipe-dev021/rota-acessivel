@@ -206,16 +206,21 @@ def _gerar_buraco() -> None:
 
 
 def _gerar_poste() -> None:
-    """Gera o sprite de poste/canteiro estrutural fixo com base de concreto."""
+    """Gera o sprite de poste/canteiro fixo arborizado (estilo orla de Maricá)."""
     surf = _criar_superficie()
     pygame.draw.ellipse(surf, (38, 32, 26, 75), (6, 36, 36, 9))
-    pygame.draw.rect(surf, (124, 132, 144), (6, 6, 36, 36), border_radius=8)
-    pygame.draw.rect(surf, (94, 102, 114), (6, 26, 36, 16), border_radius=6)
-    pygame.draw.rect(surf, (44, 52, 64), (6, 6, 36, 36), 2, border_radius=8)
-    pygame.draw.circle(surf, (66, 74, 86), (24, 23), 13)
-    pygame.draw.circle(surf, (164, 174, 188), (24, 23), 9)
-    pygame.draw.circle(surf, (232, 238, 246), (21, 20), 4)
-    pygame.draw.circle(surf, (34, 42, 54), (24, 23), 13, 2)
+    # Floreira/base de concreto fixa com borda arredondada
+    pygame.draw.rect(surf, (132, 124, 114), (5, 7, 38, 34), border_radius=8)
+    pygame.draw.rect(surf, (96, 88, 80), (5, 28, 38, 13), border_radius=6)
+    pygame.draw.rect(surf, (46, 40, 36), (5, 7, 38, 34), 2, border_radius=8)
+    # Folhagem verde decorativa na base + coluna metálica do poste no centro
+    pygame.draw.circle(surf, (68, 142, 74), (15, 22), 7)
+    pygame.draw.circle(surf, (84, 164, 88), (33, 22), 7)
+    pygame.draw.circle(surf, (76, 152, 80), (24, 30), 7)
+    pygame.draw.circle(surf, (58, 68, 82), (24, 21), 10)
+    pygame.draw.circle(surf, (176, 186, 200), (24, 21), 7)
+    pygame.draw.circle(surf, (242, 246, 252), (22, 19), 3)
+    pygame.draw.circle(surf, (30, 38, 48), (24, 21), 10, 2)
     pygame.image.save(surf, caminho_arquivo(ARQUIVO_IMG_POSTE))
 
 
