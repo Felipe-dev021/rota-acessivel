@@ -63,6 +63,7 @@ class HUD:
 
         self._cache_fundos: Dict[Tuple[int, bool], pygame.Surface] = {}
         self._cache_overlay: Dict[bool, pygame.Surface] = {}
+        self._cache_luz_solar: Optional[pygame.Surface] = None
         self._cache_feedback_chave: Optional[Tuple[str, str, bool, bool]] = None
         self._cache_feedback_surf: Optional[pygame.Surface] = None
         self._cache_atalhos_chave: Optional[Tuple[bool, bool, bool, bool, bool]] = None
@@ -71,7 +72,6 @@ class HUD:
         self._miniaturas_legenda: Dict[str, pygame.Surface] = {}
         self._carregar_miniaturas_legenda()
 
-        # Retângulos clicáveis atualizados a cada tela para suporte a mouse
         self.botoes_ativos: Dict[str, pygame.Rect] = {}
         self.botao_testar_hud: pygame.Rect = pygame.Rect(0, 0, 0, 0)
 
@@ -272,30 +272,30 @@ class HUD:
         y: int,
         cores: Dict[str, Tuple[int, ...]],
     ) -> None:
-        """Desenha o icônico ônibus Vermelhinho (Tarifa Zero) de Maricá/RJ."""
-        pygame.draw.rect(surf, cores["vermelhinho"], (x, y, 86, 32), border_radius=6)
-        pygame.draw.rect(surf, (250, 248, 244), (x + 2, y + 20, 82, 4))
-        # Janelas do ônibus
+        """Desenha o ônibus Vermelhinho 2.5D (Tarifa Zero) de Maricá/RJ com sombra."""
+        pygame.draw.ellipse(surf, (24, 28, 34), (x + 4, y + 26, 86, 12))
+        pygame.draw.rect(surf, cores["vermelhinho"], (x, y, 88, 32), border_radius=6)
+        pygame.draw.rect(surf, (240, 74, 74), (x + 2, y + 2, 84, 7), border_radius=4)
+        pygame.draw.rect(surf, (230, 236, 242), (x + 26, y - 3, 28, 6), border_radius=2)
+        pygame.draw.rect(surf, (250, 248, 244), (x + 2, y + 20, 84, 4))
         for jx in (x + 8, x + 26, x + 44, x + 64):
-            larg = 14 if jx < x + 60 else 16
-            pygame.draw.rect(surf, (186, 230, 253), (jx, y + 5, larg, 11), border_radius=2)
-        # Rodas e farol
-        pygame.draw.circle(surf, (26, 30, 38), (x + 18, y + 32), 6)
-        pygame.draw.circle(surf, (26, 30, 38), (x + 68, y + 32), 6)
-        pygame.draw.circle(surf, (254, 240, 138), (x + 84, y + 24), 3)
-        pygame.draw.rect(surf, cores["tile_borda"], (x, y, 86, 32), 2, border_radius=6)
+            larg = 14 if jx < x + 60 else 18
+            pygame.draw.rect(surf, (186, 230, 253), (jx, y + 8, larg, 10), border_radius=2)
+        pygame.draw.circle(surf, (22, 26, 34), (x + 18, y + 32), 6)
+        pygame.draw.circle(surf, (22, 26, 34), (x + 70, y + 32), 6)
+        pygame.draw.circle(surf, (254, 240, 138), (x + 85, y + 24), 3)
+        pygame.draw.rect(surf, cores["tile_borda"], (x, y, 88, 32), 2, border_radius=6)
 
     def _criar_fundo_fase(
         self,
         numero_fase: int,
         modo_alto_contraste: bool,
     ) -> pygame.Surface:
-        """Pré-renderiza o cenário cartoon de Maricá/RJ da fase em cache (1 blit/frame)."""
+        """Pré-renderiza o cenário 2.5D de Maricá/RJ da fase em cache (1 blit/frame)."""
         altura_mapa = ROWS * TILE
         surf = pygame.Surface((LARGURA, altura_mapa))
         cores = self.paleta(modo_alto_contraste)
 
-        # 1. Calçada central (linhas 1 a 9) + faixas cênicas (linha 0 e linha 10)
         for lin in range(ROWS):
             for col in range(COLS):
                 ret = pygame.Rect(col * TILE, lin * TILE, TILE, TILE)
@@ -316,72 +316,125 @@ class HUD:
                 pygame.draw.rect(surf, cor, ret)
                 if 1 <= lin <= ROWS - 2:
                     pygame.draw.rect(surf, cores["grade_linha"], ret, 1)
+                    if not modo_alto_contraste:
+                        pygame.draw.line(
+                            surf, (246, 241, 230), (ret.left + 1, ret.top + 1), (ret.right - 2, ret.top + 1), 1
+                        )
+                        pygame.draw.line(
+                            surf, (246, 241, 230), (ret.left + 1, ret.top + 1), (ret.left + 1, ret.bottom - 2), 1
+                        )
+                        pygame.draw.line(
+                            surf, (196, 186, 170), (ret.left + 2, ret.bottom - 2), (ret.right - 2, ret.bottom - 2), 1
+                        )
 
-        # 2. Ciclovia vermelha de Maricá (filete charmoso na borda superior da calçada)
         if not modo_alto_contraste and numero_fase in (1, 4):
-            pygame.draw.rect(surf, cores["ciclovia_vermelha"], (0, TILE, LARGURA, 10))
+            pygame.draw.rect(surf, cores["ciclovia_vermelha"], (0, TILE, LARGURA, 12))
             for x_traco in range(12, LARGURA, 40):
-                pygame.draw.rect(surf, (250, 246, 238), (x_traco, TILE + 4, 18, 2))
+                pygame.draw.rect(surf, (250, 246, 238), (x_traco, TILE + 5, 18, 2))
 
-        # 3. Meio-fio superior e inferior
         pygame.draw.rect(surf, cores["meio_fio"], (0, TILE - 6, LARGURA, 6))
-        pygame.draw.rect(surf, cores["meio_fio"], (0, (ROWS - 1) * TILE, LARGURA, 7))
+        pygame.draw.rect(surf, cores["meio_fio"], (0, (ROWS - 1) * TILE - 4, LARGURA, 6))
+        if not modo_alto_contraste:
+            pygame.draw.rect(surf, (132, 122, 108), (0, (ROWS - 1) * TILE + 2, LARGURA, 6))
+            pygame.draw.rect(surf, (52, 58, 68), (0, (ROWS - 1) * TILE + 8, LARGURA, 4))
 
-        # 4. Faixas de pedestres e rua (linha 10)
         for x_faixa in range(24, LARGURA - 120, 72):
             pygame.draw.rect(
                 surf,
                 cores["faixa_rua"],
-                (x_faixa, (ROWS - 1) * TILE + 18, 38, 10),
+                (x_faixa, (ROWS - 1) * TILE + 20, 38, 10),
                 border_radius=3,
             )
 
-        # 5. Elementos icônicos de Maricá/RJ em cada fase
         if not modo_alto_contraste:
             if numero_fase == 1:
-                # Orla de Araçatiba: brilho na lagoa + coqueiros + Vermelhinho no ponto!
-                for x_onda in range(18, LARGURA - 30, 84):
-                    pygame.draw.arc(
-                        surf, cores["lagoa_brilho"], (x_onda, 14, 44, 14), 0, math.pi, 2
-                    )
-                for x_coq in (80, 270, 480, 690, 860):
-                    pygame.draw.circle(surf, (56, 134, 62), (x_coq, 24), 16)
-                    pygame.draw.circle(surf, (88, 168, 82), (x_coq - 5, 19), 10)
-                self._desenhar_vermelhinho(surf, LARGURA - 108, (ROWS - 1) * TILE + 8, cores)
+                pygame.draw.rect(surf, (148, 104, 62), (0, TILE - 12, LARGURA, 7))
+                for x_p in range(0, LARGURA, 24):
+                    pygame.draw.line(surf, (108, 72, 42), (x_p, TILE - 12), (x_p, TILE - 5), 2)
+                for x_coq in (84, 276, 486, 696, 864):
+                    pygame.draw.ellipse(surf, (54, 88, 62), (x_coq + 8, 30, 28, 10))
+                    pygame.draw.circle(surf, (44, 122, 54), (x_coq, 24), 17)
+                    pygame.draw.circle(surf, (88, 174, 84), (x_coq - 5, 18), 11)
+                self._desenhar_vermelhinho(surf, LARGURA - 110, (ROWS - 1) * TILE + 8, cores)
 
             elif numero_fase == 2:
-                # Escola Municipal do Centro: fachada alegre + árvores
-                pygame.draw.rect(surf, (236, 214, 180), (620, 4, 320, 38), border_radius=6)
-                pygame.draw.rect(surf, (206, 98, 48), (620, 4, 320, 12), border_radius=4)
-                for jx in range(640, 920, 44):
-                    pygame.draw.rect(surf, (186, 230, 253), (jx, 20, 24, 16), border_radius=2)
-                for x_arv in (60, 190, 330, 490):
-                    pygame.draw.circle(surf, (66, 136, 68), (x_arv, 22), 16)
-                    pygame.draw.circle(surf, (104, 172, 92), (x_arv - 4, 18), 10)
+                pygame.draw.rect(surf, (238, 220, 188), (600, 14, 340, 28), border_radius=4)
+                pygame.draw.rect(surf, (198, 86, 44), (596, 2, 348, 16), border_radius=5)
+                pygame.draw.rect(surf, (226, 114, 64), (600, 3, 340, 6), border_radius=3)
+                for jx in range(622, 920, 44):
+                    pygame.draw.rect(surf, (110, 152, 184), (jx, 20, 24, 16), border_radius=2)
+                    pygame.draw.rect(surf, (196, 234, 255), (jx + 2, 22, 20, 10), border_radius=1)
+                for x_arv in (64, 196, 336, 488):
+                    pygame.draw.ellipse(surf, (56, 108, 56), (x_arv - 10, 30, 32, 10))
+                    pygame.draw.circle(surf, (56, 132, 62), (x_arv, 20), 17)
+                    pygame.draw.circle(surf, (104, 178, 92), (x_arv - 4, 16), 11)
 
             elif numero_fase == 3:
-                # Praça Orlando de Barros Pimentel: Ipês amarelos + Coreto central!
-                pygame.draw.circle(surf, (236, 226, 208), (480, 22), 20)
-                pygame.draw.circle(surf, (196, 64, 56), (480, 22), 14)
-                pygame.draw.circle(surf, (248, 222, 168), (480, 22), 6)
-                for x_ipe in (70, 210, 340, 620, 760, 890):
-                    pygame.draw.circle(surf, (234, 179, 8), (x_ipe, 22), 15)
-                    pygame.draw.circle(surf, (254, 240, 138), (x_ipe - 4, 18), 9)
+                pygame.draw.ellipse(surf, (58, 104, 54), (452, 28, 62, 16))
+                pygame.draw.circle(surf, (236, 226, 208), (480, 22), 21)
+                pygame.draw.circle(surf, (186, 56, 48), (480, 19), 15)
+                pygame.draw.circle(surf, (226, 86, 72), (476, 15), 9)
+                for x_ipe in (72, 212, 344, 616, 756, 888):
+                    pygame.draw.ellipse(surf, (56, 104, 54), (x_ipe - 8, 30, 30, 10))
+                    pygame.draw.circle(surf, (218, 160, 8), (x_ipe, 22), 16)
+                    pygame.draw.circle(surf, (254, 232, 118), (x_ipe - 4, 17), 10)
+                    pygame.draw.circle(surf, (250, 204, 21), (x_ipe + 10, TILE + 18), 3)
+                    pygame.draw.circle(surf, (254, 240, 138), (x_ipe - 12, TILE + 30), 2)
 
             elif numero_fase == 4:
-                # Posto de Saúde — Itaipuaçu: orla + fachada branca com cruz vermelha + Vermelhinho
-                for x_onda in range(20, 620, 84):
-                    pygame.draw.arc(
-                        surf, cores["lagoa_brilho"], (x_onda, 14, 44, 14), 0, math.pi, 2
-                    )
-                pygame.draw.rect(surf, (248, 250, 252), (660, 4, 280, 38), border_radius=6)
-                pygame.draw.rect(surf, (214, 48, 48), (788, 10, 24, 8))
-                pygame.draw.rect(surf, (214, 48, 48), (796, 6, 8, 24))
+                pygame.draw.rect(surf, (236, 242, 248), (648, 12, 294, 30), border_radius=5)
+                pygame.draw.rect(surf, (206, 216, 228), (644, 2, 302, 12), border_radius=4)
+                pygame.draw.rect(surf, (214, 48, 48), (784, 18, 26, 8))
+                pygame.draw.rect(surf, (214, 48, 48), (793, 10, 8, 24))
                 self._desenhar_vermelhinho(surf, 36, (ROWS - 1) * TILE + 8, cores)
 
         if pygame.display.get_surface() is not None:
             surf = surf.convert()
         return surf
+
+    def desenhar_iluminacao_25d(
+        self,
+        tela: pygame.Surface,
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Aplica um brilho solar litorâneo quente em cache (desligado no alto contraste)."""
+        if modo_alto_contraste:
+            return
+        if self._cache_luz_solar is None:
+            luz = pygame.Surface((LARGURA, ROWS * TILE), pygame.SRCALPHA)
+            pygame.draw.polygon(
+                luz, (255, 244, 200, 20), [(0, 0), (340, 0), (140, ROWS * TILE), (0, ROWS * TILE)]
+            )
+            pygame.draw.polygon(
+                luz, (255, 244, 200, 14), [(420, 0), (660, 0), (460, ROWS * TILE), (240, ROWS * TILE)]
+            )
+            self._cache_luz_solar = luz
+        tela.blit(self._cache_luz_solar, (0, HUD_ALTURA))
+
+    def desenhar_ambiente_vivo(
+        self,
+        tela: pygame.Surface,
+        numero_fase: int,
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Desenha animação ambiental super leve (brilho na lagoa / pétalas de ipê)."""
+        if modo_alto_contraste:
+            return
+        cores = self.paleta(False)
+        t = self.tempo_animacao
+        if numero_fase in (1, 4):
+            limite_x = LARGURA - 40 if numero_fase == 1 else 620
+            for idx, base_x in enumerate(range(30, limite_x, 96)):
+                desl = round(math.sin(t * 2.2 + idx) * 8)
+                y_onda = HUD_ALTURA + 16 + (idx % 2) * 10
+                pygame.draw.line(
+                    tela, cores["lagoa_brilho"], (base_x + desl, y_onda), (base_x + desl + 26, y_onda), 2
+                )
+        elif numero_fase == 3:
+            for idx in range(5):
+                px = int((idx * 195 + t * 18) % LARGURA)
+                py = HUD_ALTURA + 28 + int(math.sin(t * 1.8 + idx) * 14) + idx * 4
+                pygame.draw.circle(tela, (254, 226, 98), (px, py), 3)
 
     def desenhar_grade_calcada(
         self,
@@ -537,7 +590,6 @@ class HUD:
             tela, cores["hud_borda"], (0, HUD_ALTURA - 2), (LARGURA, HUD_ALTURA - 2), borda
         )
 
-        # Cartão esquerdo: Retrato do Morador + Fase
         cartao_esq = pygame.Rect(10, 8, 345, 50)
         pygame.draw.rect(tela, cores["hud_cartao"], cartao_esq, border_radius=8)
         tela.blit(retrato_morador, (16, 13))
@@ -555,7 +607,6 @@ class HUD:
         )
         tela.blit(txt_morador, (62, 34))
 
-        # Cartão central: Cronômetro com barra visual + Orçamento de recursos
         cartao_mid = pygame.Rect(365, 8, 415, 50)
         pygame.draw.rect(tela, cores["hud_cartao"], cartao_mid, border_radius=8)
 
@@ -578,7 +629,6 @@ class HUD:
                 tela, cor_tempo, (barra_bg.x, barra_bg.y, largura_fill, barra_bg.height), border_radius=6
             )
 
-        # Orçamento visual em fichas
         cor_rec = cores["aviso"] if recursos == 0 else cores["texto_principal"]
         txt_rec = self.fonte_pequena.render(
             f"Orçamento: {recursos}/{recursos_iniciais}",
@@ -592,7 +642,6 @@ class HUD:
             pygame.draw.circle(tela, cor_ficha, (cx, 42), 7)
             pygame.draw.circle(tela, cores["texto_principal"], (cx, 42), 7, 1)
 
-        # Botão clicável [Testar Rota] à direita
         self.botao_testar_hud = pygame.Rect(790, 8, 160, 50)
         cor_btn = cores["rota_preview"] if testando_rota else cores["destaque_e"]
         pygame.draw.rect(tela, cor_btn, self.botao_testar_hud, border_radius=8)
@@ -603,7 +652,6 @@ class HUD:
         txt_btn = self.fonte_pequena.render(rotulo_btn, True, cores["destaque_e_texto"])
         tela.blit(txt_btn, txt_btn.get_rect(center=self.botao_testar_hud.center))
 
-        # Linha inferior de atalhos rápidos em cache (evita renderizar texto toda frame)
         chave_at = (
             modo_alto_contraste,
             self.fonte_grande,
@@ -640,7 +688,7 @@ class HUD:
         eh_ok = self.tipo_feedback == "OK"
         cor_fundo = cores["sucesso_fundo"] if eh_ok else cores["erro_fundo"]
         cor_borda = cores["sucesso_borda"] if eh_ok else cores["erro_borda"]
-        prefixo = "[OK] " if eh_ok else "[!] "
+        prefixo = "✓ " if eh_ok else "💬 "
 
         ret = pygame.Rect(16, ALTURA - ALTURA_FEEDBACK - 10, LARGURA - 32, ALTURA_FEEDBACK)
         pygame.draw.rect(tela, cor_fundo, ret, border_radius=10)
@@ -689,7 +737,6 @@ class HUD:
             border_radius=18,
         )
 
-        # Cabeçalho colorido de boas-vindas
         faixa_topo = pygame.Rect(painel.x, painel.y, painel.width, 118)
         pygame.draw.rect(
             tela,
@@ -722,7 +769,6 @@ class HUD:
             espacamento=4,
         )
 
-        # Botões principais clicáveis (teclado ou mouse)
         self._desenhar_botao(
             tela,
             "jogar",
@@ -753,7 +799,6 @@ class HUD:
             modo_alto_contraste,
         )
 
-        # Barra inferior de preferências de acessibilidade clicáveis
         self._desenhar_botao(
             tela,
             "contraste",
@@ -897,6 +942,126 @@ class HUD:
             pygame.Rect(500, ALTURA - 86, 240, 42),
             "[ESC] Voltar ao Menu",
             modo_alto_contraste,
+        )
+
+    def desenhar_briefing(
+        self,
+        tela: pygame.Surface,
+        metadados_fase: Dict[str, object],
+        total_fases: int,
+        retrato_grande: pygame.Surface,
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Desenha o popup amigável antes do início da fase com botão 'Ajudar'.
+
+        O cronômetro permanece pausado até o jogador clicar em 'Ajudar' ou
+        pressionar ENTER/ESPAÇO.
+
+        Args:
+            tela: Superfície principal do jogo.
+            metadados_fase: Dicionário de dados da fase atual.
+            total_fases: Total de fases da campanha.
+            retrato_grande: Sprite 64x64 do morador da fase.
+            modo_alto_contraste: Estado atual do modo de alto contraste.
+        """
+        self.botoes_ativos.clear()
+        cores = self.paleta(modo_alto_contraste)
+        if modo_alto_contraste not in self._cache_overlay:
+            ov = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+            ov.fill(cores["overlay"])
+            self._cache_overlay[modo_alto_contraste] = ov
+        tela.blit(self._cache_overlay[modo_alto_contraste], (0, 0))
+
+        cartao = pygame.Rect(130, 88, LARGURA - 260, 444)
+        pygame.draw.rect(tela, cores["painel_fundo"], cartao, border_radius=18)
+        pygame.draw.rect(
+            tela,
+            cores["hud_borda"],
+            cartao,
+            BORDA_ALTO_CONTRASTE if modo_alto_contraste else 3,
+            border_radius=18,
+        )
+
+        faixa = pygame.Rect(cartao.x, cartao.y, cartao.width, 76)
+        pygame.draw.rect(
+            tela,
+            cores["hud_fundo"],
+            faixa,
+            border_top_left_radius=16,
+            border_top_right_radius=16,
+        )
+        numero = int(metadados_fase["numero"])
+        badge = self.fonte_pequena.render(
+            f"FASE {numero} DE {total_fases}  ·  MARICÁ / RJ",
+            True,
+            cores["destaque_e"],
+        )
+        tela.blit(badge, (cartao.x + 26, cartao.y + 12))
+        titulo = self.fonte_subtitulo.render(
+            str(metadados_fase["nome"]), True, cores["texto_principal"]
+        )
+        tela.blit(titulo, (cartao.x + 26, cartao.y + 36))
+
+        cx_av, cy_av = cartao.x + 68, cartao.y + 144
+        pygame.draw.circle(tela, cores["botao_hover"], (cx_av, cy_av), 42)
+        pygame.draw.circle(tela, cores["hud_borda"], (cx_av, cy_av), 42, 3)
+        tela.blit(retrato_grande, retrato_grande.get_rect(center=(cx_av, cy_av)))
+
+        nome_morador = str(metadados_fase["nome_morador"])
+        tela.blit(
+            self.fonte_subtitulo.render(nome_morador, True, cores["texto_escuro"]),
+            (cartao.x + 126, cartao.y + 104),
+        )
+        tela.blit(
+            self.fonte_pequena.render(
+                str(metadados_fase["perfil_morador"]),
+                True,
+                cores["texto_suave_escuro"],
+            ),
+            (cartao.x + 126, cartao.y + 132),
+        )
+
+        balao = pygame.Rect(cartao.x + 126, cartao.y + 160, cartao.width - 156, 86)
+        pygame.draw.rect(tela, cores["botao_hover"], balao, border_radius=12)
+        pygame.draw.rect(tela, cores["painel_borda"], balao, 2, border_radius=12)
+        self._desenhar_texto_quebrado(
+            tela,
+            str(metadados_fase["descricao"]),
+            self.fonte_normal,
+            cores["texto_escuro"],
+            balao.x + 14,
+            balao.y + 12,
+            balao.width - 28,
+            espacamento=4,
+        )
+
+        pilulas = [
+            f"Orçamento: {metadados_fase['recursos']} obras",
+            f"Tempo: {int(float(metadados_fase['tempo']))}s",
+            f"Destino: {metadados_fase['local_destino']}",
+        ]
+        larg_p = (cartao.width - 72) // 3
+        y_p = cartao.y + 266
+        for idx, texto_p in enumerate(pilulas):
+            ret_p = pygame.Rect(cartao.x + 26 + idx * (larg_p + 10), y_p, larg_p, 40)
+            pygame.draw.rect(tela, cores["hud_fundo"], ret_p, border_radius=8)
+            render_p = self.fonte_pequena.render(texto_p, True, cores["texto_principal"])
+            tela.blit(render_p, render_p.get_rect(center=ret_p.center))
+
+        dica = self.fonte_pequena.render(
+            "Dica: Use WASD/Setas (+ SHIFT p/ correr) ou clique na calçada · [E] resolve barreiras · [ESPAÇO] testa a rota!",
+            True,
+            cores["texto_suave_escuro"],
+        )
+        tela.blit(dica, dica.get_rect(center=(LARGURA // 2, cartao.y + 334)))
+
+        self._desenhar_botao(
+            tela,
+            "ajudar",
+            pygame.Rect(cartao.centerx - 165, cartao.y + 362, 330, 52),
+            f"Ajudar {nome_morador}!  [ENTER]",
+            modo_alto_contraste,
+            destaque=True,
         )
 
     def desenhar_pausa(
