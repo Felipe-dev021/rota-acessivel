@@ -1,9 +1,11 @@
-"""Módulo de interface (HUD) e telas de estado do jogo 'Rota Acessível'.
+"""Módulo de interface (HUD), cenários urbanos em cache e telas interativas.
 
-Implementa a classe HUD responsável por desenhar a calçada urbana, a barra
-superior (96 px), o feedback educativo inferior temporário ('[OK]' / '[!]'),
-o destaque de interação '[E]' e as telas completas de MENU, INSTRUCOES, PAUSA,
-TRANSICAO e FIM com suporte integral ao Modo Alto Contraste.
+Implementa a classe HUD com:
+- Pré-renderização em cache dos cenários cartoon 2D de cada fase (60 FPS estáveis);
+- Barra superior moderna (96 px) com retrato do Morador, barra de tempo, orçamento
+  visual e atalhos de acessibilidade ([C], [F], [M], [N]);
+- Suporte completo a teclado e clique/hover do mouse em menus, mapa e botões;
+- Telas acolhedoras para MENU, INSTRUCOES, MAPA, PAUSA, TRANSICAO, FIM e CREDITOS.
 """
 
 import math
@@ -41,10 +43,10 @@ from config import (
 
 
 class HUD:
-    """Gerencia a renderização da interface, grade da calçada e telas de estado."""
+    """Gerencia cenários em cache, barra superior, feedback e telas clicáveis."""
 
     def __init__(self) -> None:
-        """Inicializa as fontes, o estado do feedback e as miniaturas de legenda."""
+        """Inicializa fontes, caches de cenário/overlay, botões e miniaturas."""
         self.fonte_grande: bool = False
         self.fonte_titulo: pygame.font.Font
         self.fonte_subtitulo: pygame.font.Font
@@ -58,15 +60,17 @@ class HUD:
         self.tempo_feedback: float = 0.0
         self.tempo_animacao: float = 0.0
 
+        self._cache_fundos: Dict[Tuple[int, bool], pygame.Surface] = {}
+        self._cache_overlay: Dict[bool, pygame.Surface] = {}
         self._miniaturas_legenda: Dict[str, pygame.Surface] = {}
         self._carregar_miniaturas_legenda()
 
-    def atualizar_fontes(self, fonte_grande: bool) -> None:
-        """Recria as fontes da interface na escala Normal ou Grande em tempo real.
+        # Retângulos clicáveis atualizados a cada tela para suporte a mouse
+        self.botoes_ativos: Dict[str, pygame.Rect] = {}
+        self.botao_testar_hud: pygame.Rect = pygame.Rect(0, 0, 0, 0)
 
-        Args:
-            fonte_grande: True aplica FONTES_GRANDE; False aplica FONTES_NORMAL.
-        """
+    def atualizar_fontes(self, fonte_grande: bool) -> None:
+        """Recria as fontes da interface na escala Normal ou Grande em tempo real."""
         self.fonte_grande = fonte_grande
         escala = FONTES_GRANDE if fonte_grande else FONTES_NORMAL
         self.fonte_titulo = pygame.font.SysFont(
@@ -108,44 +112,34 @@ class HUD:
             )
 
     def paleta(self, modo_alto_contraste: bool) -> Dict[str, Tuple[int, ...]]:
-        """Retorna a paleta ativa conforme o modo de alto contraste.
-
-        Args:
-            modo_alto_contraste: True retorna CORES_ALTO_CONTRASTE; False retorna CORES_NORMAL.
-
-        Returns:
-            Dicionário de cores RGB/RGBA.
-        """
+        """Retorna a paleta ativa conforme o modo de alto contraste."""
         return CORES_ALTO_CONTRASTE if modo_alto_contraste else CORES_NORMAL
 
     def definir_feedback(self, mensagem: str, tipo: str, duracao: float) -> None:
-        """Configura a mensagem educativa temporária da faixa inferior.
-
-        Args:
-            mensagem: Texto explicativo a ser exibido.
-            tipo: 'OK' para sucesso/informação ou 'ERRO' para alerta/bloqueio.
-            duracao: Tempo em segundos que a mensagem permanecerá visível.
-        """
+        """Define uma mensagem educativa temporária na faixa inferior."""
         self.mensagem_feedback = mensagem
         self.tipo_feedback = tipo
         self.tempo_feedback = duracao
 
     def limpar_feedback(self) -> None:
-        """Limpa imediatamente qualquer mensagem educativa ativa."""
+        """Remove imediatamente qualquer mensagem de feedback ativa."""
         self.mensagem_feedback = ""
         self.tempo_feedback = 0.0
 
     def atualizar(self, dt: float) -> None:
-        """Atualiza o temporizador do feedback inferior e o relógio de animações.
-
-        Args:
-            dt: Tempo decorrido em segundos desde o frame anterior.
-        """
+        """Atualiza o temporizador do feedback inferior e o relógio de animações."""
         self.tempo_animacao += dt
         if self.tempo_feedback > 0.0:
             self.tempo_feedback = max(0.0, self.tempo_feedback - dt)
             if self.tempo_feedback == 0.0:
                 self.mensagem_feedback = ""
+
+    def obter_acao_clique(self, pos_mouse: Tuple[int, int]) -> Optional[str]:
+        """Retorna a chave do botão clicado na tela atual ou None."""
+        for acao, ret in self.botoes_ativos.items():
+            if ret.collidepoint(pos_mouse):
+                return acao
+        return None
 
     def _quebrar_texto(
         self,
@@ -153,7 +147,7 @@ class HUD:
         fonte: pygame.font.Font,
         largura_max: int,
     ) -> List[str]:
-        """Divide um texto longo em múltiplas linhas que respeitem largura_max."""
+        """Quebra um texto longo em linhas que caibam em largura_max."""
         palavras = texto.split()
         linhas: List[str] = []
         linha_atual = ""
@@ -181,7 +175,7 @@ class HUD:
         largura_max: int,
         espacamento: int = 4,
     ) -> int:
-        """Renderiza texto com quebra de linha automática e retorna o Y final."""
+        """Renderiza texto com quebra automática e retorna o Y final."""
         y_atual = y
         for linha in self._quebrar_texto(texto, fonte, largura_max):
             superficie = fonte.render(linha, True, cor)
@@ -189,47 +183,117 @@ class HUD:
             y_atual += superficie.get_height() + espacamento
         return y_atual
 
-    def desenhar_grade_calcada(
+    def _desenhar_botao(
         self,
         tela: pygame.Surface,
+        chave: str,
+        ret: pygame.Rect,
+        texto: str,
         modo_alto_contraste: bool,
+        destaque: bool = False,
     ) -> None:
-        """Desenha a via urbana 20x11 com faixa de serviço nas bordas e calçada central."""
+        """Desenha um botão arredondado com hover do mouse e o registra como clicável."""
         cores = self.paleta(modo_alto_contraste)
+        self.botoes_ativos[chave] = ret
+        mouse_sobre = ret.collidepoint(pygame.mouse.get_pos())
+
+        if destaque:
+            cor_fundo = cores["destaque_e"] if not mouse_sobre else cores["aviso"]
+            cor_borda = cores["destaque_e_texto"]
+            cor_texto = cores["destaque_e_texto"]
+        else:
+            cor_fundo = cores["botao_hover"] if mouse_sobre else cores["botao_fundo"]
+            cor_borda = cores["destaque_e"] if mouse_sobre else cores["botao_borda"]
+            cor_texto = cores["texto_escuro"]
+
+        espessura = 3 if (mouse_sobre or modo_alto_contraste) else 2
+        pygame.draw.rect(tela, cor_fundo, ret, border_radius=10)
+        pygame.draw.rect(tela, cor_borda, ret, espessura, border_radius=10)
+
+        render = self.fonte_media.render(texto, True, cor_texto)
+        tela.blit(render, render.get_rect(center=ret.center))
+
+    def _criar_fundo_fase(
+        self,
+        numero_fase: int,
+        modo_alto_contraste: bool,
+    ) -> pygame.Surface:
+        """Pré-renderiza o cenário cartoon 2D da fase em uma única superfície em cache."""
+        altura_mapa = ROWS * TILE
+        surf = pygame.Surface((LARGURA, altura_mapa))
+        cores = self.paleta(modo_alto_contraste)
+
+        # 1. Calçada central (linhas 1 a 9) com lajotas acolhedoras
         for lin in range(ROWS):
-            eh_borda_servico = lin == 0 or lin == ROWS - 1
             for col in range(COLS):
-                if eh_borda_servico:
+                ret = pygame.Rect(col * TILE, lin * TILE, TILE, TILE)
+                if lin == 0:
                     cor = cores["faixa_servico"]
+                elif lin == ROWS - 1:
+                    cor = cores["asfalto"]
                 else:
                     cor = (
                         cores["calcada_clara"]
                         if (lin + col) % 2 == 0
                         else cores["calcada_escura"]
                     )
-                ret = pygame.Rect(col * TILE, HUD_ALTURA + lin * TILE, TILE, TILE)
-                pygame.draw.rect(tela, cor, ret)
-                pygame.draw.rect(tela, cores["grade_linha"], ret, 1)
+                pygame.draw.rect(surf, cor, ret)
+                if 1 <= lin <= ROWS - 2:
+                    pygame.draw.rect(surf, cores["grade_linha"], ret, 1)
+
+        # 2. Meio-fio superior e inferior
+        pygame.draw.rect(surf, cores["meio_fio"], (0, TILE - 6, LARGURA, 6))
+        pygame.draw.rect(surf, cores["meio_fio"], (0, (ROWS - 1) * TILE, LARGURA, 7))
+
+        # 3. Faixas de pedestres / sinalização na rua (borda inferior)
+        for x_faixa in range(28, LARGURA - 40, 72):
+            pygame.draw.rect(
+                surf,
+                cores["faixa_rua"],
+                (x_faixa, (ROWS - 1) * TILE + 18, 38, 10),
+                border_radius=3,
+            )
+
+        # 4. Decoração temática leve no canteiro superior (sem atrapalhar leitura)
+        if not modo_alto_contraste:
+            cor_acento = cores.get(f"fase_{numero_fase}_acento", cores["fase_1_acento"])
+            for x_dec in range(24, LARGURA - 24, 96):
+                # Copas de árvores cartoon ou canteiros temáticos
+                pygame.draw.circle(surf, (82, 138, 72), (x_dec + 16, 22), 15)
+                pygame.draw.circle(surf, (108, 168, 92), (x_dec + 12, 18), 10)
+                pygame.draw.circle(surf, cor_acento, (x_dec + 56, 22), 6)
+
+        if pygame.display.get_surface() is not None:
+            surf = surf.convert()
+        return surf
+
+    def desenhar_grade_calcada(
+        self,
+        tela: pygame.Surface,
+        numero_fase: int,
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Desenha o cenário urbano da fase em 1 único blit usando cache (60 FPS)."""
+        chave = (numero_fase, modo_alto_contraste)
+        if chave not in self._cache_fundos:
+            self._cache_fundos[chave] = self._criar_fundo_fase(
+                numero_fase, modo_alto_contraste
+            )
+        tela.blit(self._cache_fundos[chave], (0, HUD_ALTURA))
 
     def desenhar_marcadores_rota(
         self,
         tela: pygame.Surface,
         inicio_morador: Tuple[int, int],
         destino: Tuple[int, int],
+        nome_destino: str,
         modo_alto_contraste: bool,
     ) -> None:
-        """Desenha marcações visuais nítidas de PARTIDA e DESTINO sobre a calçada.
-
-        Args:
-            tela: Superfície principal do jogo.
-            inicio_morador: Célula (col, lin) de partida do Morador.
-            destino: Célula (col, lin) do destino da fase.
-            modo_alto_contraste: Estado atual do modo de alto contraste.
-        """
+        """Desenha etiquetas nítidas de PARTIDA e do DESTINO real da fase."""
         cores = self.paleta(modo_alto_contraste)
         marcadores = (
             (inicio_morador, "PARTIDA", cores["partida_marcador"]),
-            (destino, "DESTINO", cores["destino_marcador"]),
+            (destino, nome_destino, cores["destino_marcador"]),
         )
         for (col, lin), rotulo, cor_fundo in marcadores:
             cx = col * TILE + TILE // 2
@@ -244,9 +308,9 @@ class HUD:
             caixa.clamp_ip(
                 pygame.Rect(4, HUD_ALTURA + 2, LARGURA - 8, ALTURA - HUD_ALTURA - 4)
             )
-            fundo = caixa.inflate(8, 4)
-            pygame.draw.rect(tela, cor_fundo, fundo, border_radius=4)
-            pygame.draw.rect(tela, cores["tile_borda"], fundo, 1, border_radius=4)
+            fundo = caixa.inflate(10, 4)
+            pygame.draw.rect(tela, cor_fundo, fundo, border_radius=5)
+            pygame.draw.rect(tela, cores["tile_borda"], fundo, 1, border_radius=5)
             tela.blit(txt, caixa)
 
     def desenhar_rastro_morador(
@@ -256,14 +320,7 @@ class HUD:
         rota_sucesso: bool,
         modo_alto_contraste: bool,
     ) -> None:
-        """Desenha um rastro pontilhado mostrando o trajeto percorrido pelo Morador.
-
-        Args:
-            tela: Superfície principal do jogo.
-            celulas_percorridas: Lista de células (col, lin) já atravessadas.
-            rota_sucesso: True destaca em verde de rota livre; False em azul-alerta.
-            modo_alto_contraste: Estado atual do modo de alto contraste.
-        """
+        """Desenha um rastro pontilhado suave mostrando o trajeto do Morador."""
         if len(celulas_percorridas) < 2:
             return
         cores = self.paleta(modo_alto_contraste)
@@ -290,7 +347,7 @@ class HUD:
         barreira: Optional[Barreira],
         modo_alto_contraste: bool,
     ) -> None:
-        """Desenha moldura pulsante senoidal '[E] + ação e custo' sobre a barreira próxima."""
+        """Desenha moldura pulsante senoidal '[E] + ação e custo' sobre a barreira."""
         if barreira is None:
             return
         cores = self.paleta(modo_alto_contraste)
@@ -305,13 +362,15 @@ class HUD:
         caixa = texto.get_rect(
             midbottom=(
                 barreira.rect.centerx,
-                max(HUD_ALTURA + 24, ret_pulsante.top - 3),
+                max(HUD_ALTURA + 24, ret_pulsante.top - 4),
             )
         )
-        caixa.clamp_ip(pygame.Rect(8, HUD_ALTURA + 4, LARGURA - 16, ALTURA - HUD_ALTURA - 8))
-        caixa_fundo = caixa.inflate(12, 6)
-        pygame.draw.rect(tela, cores["destaque_e"], caixa_fundo, border_radius=5)
-        pygame.draw.rect(tela, cores["destaque_e_texto"], caixa_fundo, 2, border_radius=5)
+        caixa.clamp_ip(
+            pygame.Rect(8, HUD_ALTURA + 4, LARGURA - 16, ALTURA - HUD_ALTURA - 8)
+        )
+        caixa_fundo = caixa.inflate(14, 6)
+        pygame.draw.rect(tela, cores["destaque_e"], caixa_fundo, border_radius=6)
+        pygame.draw.rect(tela, cores["destaque_e_texto"], caixa_fundo, 2, border_radius=6)
         tela.blit(texto, caixa)
 
     def desenhar_barra_superior(
@@ -320,14 +379,18 @@ class HUD:
         numero_fase: int,
         total_fases: int,
         nome_fase: str,
+        nome_morador: str,
+        retrato_morador: pygame.Surface,
         tempo_restante: float,
+        tempo_total: float,
         recursos: int,
+        recursos_iniciais: int,
         modo_alto_contraste: bool,
         audio_ativo: bool,
         testando_rota: bool,
         musica_ativa: bool = True,
     ) -> None:
-        """Desenha o HUD superior (96 px) com fase, cronômetro, orçamento e acessibilidade."""
+        """Desenha o HUD superior moderno (96 px) com retrato, barra de tempo e ações."""
         cores = self.paleta(modo_alto_contraste)
         ret_hud = pygame.Rect(0, 0, LARGURA, HUD_ALTURA)
         pygame.draw.rect(tela, cores["hud_fundo"], ret_hud)
@@ -336,55 +399,91 @@ class HUD:
             tela, cores["hud_borda"], (0, HUD_ALTURA - 2), (LARGURA, HUD_ALTURA - 2), borda
         )
 
-        # Linha 1: Nome da fase, Cronômetro (alerta <= 15s) e Recursos
-        titulo_fase = self.fonte_media.render(
+        # Cartão esquerdo: Retrato do Morador + Fase
+        cartao_esq = pygame.Rect(10, 8, 345, 50)
+        pygame.draw.rect(tela, cores["hud_cartao"], cartao_esq, border_radius=8)
+        tela.blit(retrato_morador, (16, 13))
+
+        txt_fase = self.fonte_media.render(
             f"F{numero_fase}/{total_fases}: {nome_fase}",
             True,
             cores["texto_principal"],
         )
-        tela.blit(titulo_fase, (14, 12))
+        tela.blit(txt_fase, (62, 11))
+        txt_morador = self.fonte_pequena.render(
+            f"Morador: {nome_morador}",
+            True,
+            cores["destaque_e"],
+        )
+        tela.blit(txt_morador, (62, 34))
+
+        # Cartão central: Cronômetro com barra visual + Orçamento de recursos
+        cartao_mid = pygame.Rect(365, 8, 415, 50)
+        pygame.draw.rect(tela, cores["hud_cartao"], cartao_mid, border_radius=8)
 
         critico = tempo_restante <= TEMPO_ALERTA_CRITICO
-        cor_tempo = cores["erro_borda"] if critico else cores["texto_principal"]
-        prefixo_tempo = "[!] " if critico else ""
-        txt_tempo = self.fonte_media.render(
-            f"{prefixo_tempo}Tempo: {max(0.0, tempo_restante):04.1f}s",
+        cor_tempo = cores["erro_borda"] if critico else cores["sucesso_borda"]
+        prefixo_t = "[!] " if critico else ""
+        txt_tempo = self.fonte_pequena.render(
+            f"{prefixo_t}Tempo: {max(0.0, tempo_restante):04.1f}s",
             True,
-            cor_tempo,
+            cores["texto_principal"],
         )
-        tela.blit(txt_tempo, (440, 12))
+        tela.blit(txt_tempo, (377, 12))
 
+        barra_bg = pygame.Rect(377, 36, 170, 12)
+        pygame.draw.rect(tela, cores["hud_fundo"], barra_bg, border_radius=6)
+        razao = max(0.0, min(1.0, tempo_restante / max(1.0, tempo_total)))
+        largura_fill = max(0, round(barra_bg.width * razao))
+        if largura_fill > 0:
+            pygame.draw.rect(
+                tela, cor_tempo, (barra_bg.x, barra_bg.y, largura_fill, barra_bg.height), border_radius=6
+            )
+
+        # Orçamento visual em fichas
         cor_rec = cores["aviso"] if recursos == 0 else cores["texto_principal"]
-        txt_rec = self.fonte_media.render(
-            f"Recursos: {recursos}",
+        txt_rec = self.fonte_pequena.render(
+            f"Orçamento: {recursos}/{recursos_iniciais}",
             True,
             cor_rec,
         )
-        tela.blit(txt_rec, (670, 12))
+        tela.blit(txt_rec, (568, 12))
+        for i in range(recursos_iniciais):
+            cor_ficha = cores["destaque_e"] if i < recursos else cores["hud_fundo"]
+            cx = 576 + i * 24
+            pygame.draw.circle(tela, cor_ficha, (cx, 42), 7)
+            pygame.draw.circle(tela, cores["texto_principal"], (cx, 42), 7, 1)
 
-        status_rota = "TESTANDO..." if testando_rota else "[ESPAÇO] Testar"
-        txt_rota = self.fonte_pequena.render(status_rota, True, cores["destaque_e"])
-        tela.blit(txt_rota, (LARGURA - txt_rota.get_width() - 14, 14))
+        # Botão clicável [Testar Rota] à direita
+        self.botao_testar_hud = pygame.Rect(790, 8, 160, 50)
+        cor_btn = cores["rota_preview"] if testando_rota else cores["destaque_e"]
+        pygame.draw.rect(tela, cor_btn, self.botao_testar_hud, border_radius=8)
+        pygame.draw.rect(
+            tela, cores["destaque_e_texto"], self.botao_testar_hud, 2, border_radius=8
+        )
+        rotulo_btn = "TESTANDO..." if testando_rota else "TESTAR [ESPAÇO]"
+        txt_btn = self.fonte_pequena.render(rotulo_btn, True, cores["destaque_e_texto"])
+        tela.blit(txt_btn, txt_btn.get_rect(center=self.botao_testar_hud.center))
 
-        # Linha 2: Atalhos e indicadores completos de acessibilidade (C, F, M, N)
+        # Linha inferior de atalhos rápidos + indicadores de acessibilidade
         contraste_txt = "ALTO" if modo_alto_contraste else "NORM"
         fonte_txt = "G" if self.fonte_grande else "N"
         som_txt = "ON" if audio_ativo else "OFF"
         mus_txt = "ON" if (audio_ativo and musica_ativa) else "OFF"
-
-        linha_ctrl = (
-            f"[WASD] Mover  [E] Intervir  [R] Reiniciar  [P] Pausa   |   "
+        atalhos = (
+            f"[WASD/Setas] Mover   [E/Clique] Intervir   [R] Reiniciar   [P] Pausa   |   "
             f"[C] Contr:{contraste_txt}  [F] Fonte:{fonte_txt}  [M] Som:{som_txt}  [N] Mus:{mus_txt}"
         )
-        txt_ctrl = self.fonte_pequena.render(linha_ctrl, True, cores["texto_secundario"])
-        tela.blit(txt_ctrl, (14, 58))
+        txt_at = self.fonte_pequena.render(atalhos, True, cores["texto_secundario"])
+        tela.blit(txt_at, (14, 67))
 
     def desenhar_feedback_inferior(
         self,
         tela: pygame.Surface,
+        retrato_morador: pygame.Surface,
         modo_alto_contraste: bool,
     ) -> None:
-        """Desenha a faixa educativa inferior temporária com prefixo '[OK]' ou '[!]'."""
+        """Desenha a caixa educativa inferior temporária com retrato do Morador."""
         if not self.mensagem_feedback or self.tempo_feedback <= 0.0:
             return
 
@@ -395,17 +494,18 @@ class HUD:
         prefixo = "[OK] " if eh_ok else "[!] "
 
         ret = pygame.Rect(16, ALTURA - ALTURA_FEEDBACK - 10, LARGURA - 32, ALTURA_FEEDBACK)
-        pygame.draw.rect(tela, cor_fundo, ret, border_radius=8)
-        pygame.draw.rect(tela, cor_borda, ret, 3, border_radius=8)
+        pygame.draw.rect(tela, cor_fundo, ret, border_radius=10)
+        pygame.draw.rect(tela, cor_borda, ret, 3, border_radius=10)
 
+        tela.blit(retrato_morador, (ret.x + 12, ret.y + (ret.height - 40) // 2))
         self._desenhar_texto_quebrado(
             tela,
             prefixo + self.mensagem_feedback,
             self.fonte_normal,
             cores["texto_principal"],
-            ret.x + 14,
-            ret.y + 8,
-            ret.width - 28,
+            ret.x + 62,
+            ret.y + 10,
+            ret.width - 78,
             espacamento=2,
         )
 
@@ -416,11 +516,134 @@ class HUD:
         audio_ativo: bool,
         musica_ativa: bool = True,
     ) -> None:
-        """Desenha a tela inicial (MENU) com opções legíveis e acessíveis."""
+        """Desenha a tela inicial (MENU) acolhedora com botões clicáveis e atalhos."""
+        self.botoes_ativos.clear()
         cores = self.paleta(modo_alto_contraste)
         tela.fill(cores["fundo_tela"])
 
-        painel = pygame.Rect(84, 42, LARGURA - 168, ALTURA - 84)
+        painel = pygame.Rect(80, 34, LARGURA - 160, ALTURA - 68)
+        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=18)
+        pygame.draw.rect(
+            tela,
+            cores["painel_borda"],
+            painel,
+            BORDA_ALTO_CONTRASTE if modo_alto_contraste else 3,
+            border_radius=18,
+        )
+
+        # Cabeçalho colorido de boas-vindas
+        faixa_topo = pygame.Rect(painel.x, painel.y, painel.width, 118)
+        pygame.draw.rect(
+            tela,
+            cores["hud_fundo"],
+            faixa_topo,
+            border_top_left_radius=16,
+            border_top_right_radius=16,
+        )
+        titulo = self.fonte_titulo.render("ROTA ACESSÍVEL", True, cores["destaque_e"])
+        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, painel.y + 44)))
+        sub = self.fonte_media.render(
+            "Vila Nova — Serious Game sobre Acessibilidade e Inclusão (ABNT NBR 9050)",
+            True,
+            cores["texto_principal"],
+        )
+        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, painel.y + 88)))
+
+        self._desenhar_texto_quebrado(
+            tela,
+            (
+                "Explore 4 regiões urbanas com Alex, elimine barreiras físicas, "
+                "visuais e comunicacionais dentro do orçamento e valide a rota "
+                "contínua com cada morador da cidade."
+            ),
+            self.fonte_normal,
+            cores["texto_escuro"],
+            painel.x + 54,
+            painel.y + 134,
+            painel.width - 108,
+            espacamento=4,
+        )
+
+        # Botões principais clicáveis (teclado ou mouse)
+        self._desenhar_botao(
+            tela,
+            "jogar",
+            pygame.Rect(210, 246, LARGURA - 420, 48),
+            "[ENTER]  Iniciar Campanha (4 Fases)",
+            modo_alto_contraste,
+            destaque=True,
+        )
+        self._desenhar_botao(
+            tela,
+            "mapa",
+            pygame.Rect(210, 306, LARGURA - 420, 44),
+            "[S]  Mapa Urbano — Escolher Fase",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "instrucoes",
+            pygame.Rect(210, 362, 260, 44),
+            "[I]  Instruções",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "creditos",
+            pygame.Rect(490, 362, 260, 44),
+            "[A]  Créditos",
+            modo_alto_contraste,
+        )
+
+        # Barra inferior de preferências de acessibilidade clicáveis
+        self._desenhar_botao(
+            tela,
+            "contraste",
+            pygame.Rect(118, 434, 174, 38),
+            f"[C] Contraste: {'ALTO' if modo_alto_contraste else 'NORM'}",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "fonte",
+            pygame.Rect(302, 434, 174, 38),
+            f"[F] Fonte: {'GRANDE' if self.fonte_grande else 'NORM'}",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "audio",
+            pygame.Rect(486, 434, 174, 38),
+            f"[M] Som: {'ON' if audio_ativo else 'OFF'}",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "musica",
+            pygame.Rect(670, 434, 174, 38),
+            f"[N] Música: {'ON' if (audio_ativo and musica_ativa) else 'OFF'}",
+            modo_alto_contraste,
+        )
+
+        self._desenhar_botao(
+            tela,
+            "sair",
+            pygame.Rect(360, 494, 240, 38),
+            "[ESC]  Sair do Jogo",
+            modo_alto_contraste,
+        )
+
+    def desenhar_instrucoes(
+        self,
+        tela: pygame.Surface,
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Desenha a tela INSTRUCOES com legenda visual completa e botões clicáveis."""
+        self.botoes_ativos.clear()
+        cores = self.paleta(modo_alto_contraste)
+        tela.fill(cores["fundo_tela"])
+
+        painel = pygame.Rect(30, 22, LARGURA - 60, ALTURA - 44)
         pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=14)
         pygame.draw.rect(
             tela,
@@ -430,65 +653,12 @@ class HUD:
             border_radius=14,
         )
 
-        titulo = self.fonte_titulo.render("ROTA ACESSÍVEL", True, cores["destaque_e"])
-        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 98)))
-
-        subtitulo = self.fonte_subtitulo.render(
-            "Tema 07 — Acessibilidade e Inclusão Urbana (ABNT NBR 9050)",
-            True,
-            cores["texto_principal"],
-        )
-        tela.blit(subtitulo, subtitulo.get_rect(center=(LARGURA // 2, 142)))
-
-        self._desenhar_texto_quebrado(
-            tela,
-            (
-                "Ajude Alex a remover barreiras físicas, visuais e comunicacionais "
-                "com orçamento limitado para garantir autonomia real até o destino."
-            ),
-            self.fonte_normal,
-            cores["texto_secundario"],
-            painel.x + 48,
-            176,
-            painel.width - 96,
-            espacamento=4,
-        )
-
-        opcoes = [
-            "[ENTER / ESPAÇO]  Iniciar Campanha (4 Fases)",
-            "[S]  Mapa Urbano — Selecionar Fase",
-            "[I]  Instruções e Legenda Visual     |     [A]  Créditos e Referências",
-            f"[C]  Contraste: {'ALTO' if modo_alto_contraste else 'NORMAL'}   |   [F]  Fonte: {'GRANDE' if self.fonte_grande else 'NORMAL'}",
-            f"[M]  Áudio: {'ON' if audio_ativo else 'OFF'}   |   [N]  Música: {'ON' if (audio_ativo and musica_ativa) else 'OFF'}   |   [ESC]  Sair",
-        ]
-        y = 258
-        for texto in opcoes:
-            caixa = pygame.Rect(130, y, LARGURA - 260, 44)
-            pygame.draw.rect(tela, cores["botao_fundo"], caixa, border_radius=8)
-            pygame.draw.rect(tela, cores["botao_borda"], caixa, 2, border_radius=8)
-            render = self.fonte_media.render(texto, True, cores["texto_principal"])
-            tela.blit(render, render.get_rect(center=caixa.center))
-            y += 54
-
-    def desenhar_instrucoes(
-        self,
-        tela: pygame.Surface,
-        modo_alto_contraste: bool,
-    ) -> None:
-        """Desenha a tela INSTRUCOES com legenda visual de obstáculos e controles."""
-        cores = self.paleta(modo_alto_contraste)
-        tela.fill(cores["fundo_tela"])
-
-        painel = pygame.Rect(34, 24, LARGURA - 68, ALTURA - 48)
-        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=12)
-        pygame.draw.rect(tela, cores["painel_borda"], painel, 3, border_radius=12)
-
         titulo = self.fonte_subtitulo.render(
             "INSTRUÇÕES E LEGENDA DE OBSTÁCULOS",
             True,
-            cores["destaque_e"],
+            cores["texto_escuro"],
         )
-        tela.blit(titulo, (58, 42))
+        tela.blit(titulo, (52, 38))
 
         legenda_itens = [
             (TIPO_LIXEIRA, "Lixeira (L): deslocar da faixa livre — 0 rec"),
@@ -497,11 +667,11 @@ class HUD:
             (TIPO_SEM_PISO_TATIL, "Sem Piso Tátil (T): instalar piso tátil — 1 rec"),
             (TIPO_AVISO_SONORO, "Aviso Sonoro (S): instalar painel visual — 1 rec"),
             (TIPO_POSTE, "Poste fixo (P): intransponível — exige desvio"),
-            (TIPO_RAMPA, "Rampa (R) / Piso OK: passagem livre"),
+            (TIPO_RAMPA, "Rampa (R) / Piso OK: passagem liberada"),
             (TIPO_DESTINO, "Destino (FIM): ponto de chegada"),
         ]
 
-        y = 84
+        y = 82
         for tipo, descricao in legenda_itens:
             if modo_alto_contraste:
                 quad = pygame.Rect(52, y, 30, 30)
@@ -513,53 +683,63 @@ class HUD:
             elif tipo in self._miniaturas_legenda:
                 tela.blit(self._miniaturas_legenda[tipo], (52, y))
 
-            txt_desc = self.fonte_normal.render(descricao, True, cores["texto_principal"])
+            txt_desc = self.fonte_normal.render(descricao, True, cores["texto_escuro"])
             tela.blit(txt_desc, (92, y + 5))
             y += 46
 
-        x_dir = 528
-        sec_ctrl = self.fonte_media.render("CONTROLES E ACESSIBILIDADE", True, cores["destaque_e"])
-        tela.blit(sec_ctrl, (x_dir, 84))
-
+        x_dir = 526
+        tela.blit(
+            self.fonte_media.render("CONTROLES E ACESSIBILIDADE", True, cores["texto_escuro"]),
+            (x_dir, 82),
+        )
         controles = [
-            "WASD ou Setas: mover Alex",
-            "E: intervir na barreira [E]",
-            "ESPAÇO / ENTER: testar rota (BFS)",
+            "WASD ou Setas: mover Alex suavemente",
+            "E ou Clique no obstáculo: intervir [E]",
+            "ESPAÇO / ENTER / Botão: testar rota (BFS)",
             "R: reiniciar a fase atual",
             "P / ESC: pausar sem limite de tempo",
-            "C: alternar Modo Alto Contraste",
-            "F: alternar Fonte (Normal / Grande)",
+            "C: Alto Contraste | F: Fonte Grande",
             "M: silenciar áudio | N: silenciar música",
         ]
-        y_ctrl = 116
+        y_c = 116
         for item in controles:
-            render = self.fonte_normal.render(f"• {item}", True, cores["texto_principal"])
-            tela.blit(render, (x_dir, y_ctrl))
-            y_ctrl += 28
+            tela.blit(self.fonte_normal.render(f"• {item}", True, cores["texto_escuro"]), (x_dir, y_c))
+            y_c += 30
 
-        sec_obj = self.fonte_media.render("OBJETIVO DO SERIOUS GAME", True, cores["destaque_e"])
-        tela.blit(sec_obj, (x_dir, 354))
+        tela.blit(
+            self.fonte_media.render("COMO FUNCIONA", True, cores["texto_escuro"]),
+            (x_dir, 344),
+        )
         self._desenhar_texto_quebrado(
             tela,
             (
-                "Garanta uma faixa livre contínua até o Destino gerenciando "
-                "o orçamento limitado. Cada bloqueio explica o impacto real "
-                "na autonomia e desconta 5s."
+                "Cada fase apresenta um morador real (Clara, Lucas, Sofia ou "
+                "Mateus) e barreiras ligadas à sua necessidade. Libere uma rota "
+                "contínua dentro do orçamento e chame o morador para testar!"
             ),
             self.fonte_normal,
-            cores["texto_secundario"],
+            cores["texto_suave_escuro"],
             x_dir,
-            382,
-            378,
-            espacamento=4,
+            374,
+            380,
+            espacamento=5,
         )
 
-        rodape = self.fonte_media.render(
-            "[ENTER / ESPAÇO] Começar     |     [ESC / BACKSPACE] Voltar ao Menu",
-            True,
-            cores["destaque_e"],
+        self._desenhar_botao(
+            tela,
+            "jogar",
+            pygame.Rect(220, ALTURA - 86, 240, 42),
+            "[ENTER] Começar",
+            modo_alto_contraste,
+            destaque=True,
         )
-        tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 54)))
+        self._desenhar_botao(
+            tela,
+            "menu",
+            pygame.Rect(500, ALTURA - 86, 240, 42),
+            "[ESC] Voltar ao Menu",
+            modo_alto_contraste,
+        )
 
     def desenhar_pausa(
         self,
@@ -568,38 +748,78 @@ class HUD:
         audio_ativo: bool,
         musica_ativa: bool = True,
     ) -> None:
-        """Desenha o overlay de PAUSA preservando a visualização do mapa ao fundo."""
+        """Desenha o overlay em cache de PAUSA com botões clicáveis."""
+        self.botoes_ativos.clear()
         cores = self.paleta(modo_alto_contraste)
-        overlay = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
-        overlay.fill(cores["overlay"])
-        tela.blit(overlay, (0, 0))
+        if modo_alto_contraste not in self._cache_overlay:
+            ov = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+            ov.fill(cores["overlay"])
+            self._cache_overlay[modo_alto_contraste] = ov
+        tela.blit(self._cache_overlay[modo_alto_contraste], (0, 0))
 
-        caixa = pygame.Rect(205, 118, LARGURA - 410, 388)
-        pygame.draw.rect(tela, cores["painel_fundo"], caixa, border_radius=12)
+        caixa = pygame.Rect(230, 108, LARGURA - 460, 408)
+        pygame.draw.rect(tela, cores["painel_fundo"], caixa, border_radius=14)
         pygame.draw.rect(
             tela,
             cores["painel_borda"],
             caixa,
             BORDA_ALTO_CONTRASTE if modo_alto_contraste else 3,
-            border_radius=12,
+            border_radius=14,
         )
 
-        titulo = self.fonte_titulo.render("JOGO PAUSADO", True, cores["destaque_e"])
-        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 168)))
+        titulo = self.fonte_subtitulo.render("JOGO PAUSADO", True, cores["texto_escuro"])
+        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 146)))
 
-        opcoes = [
+        self._desenhar_botao(
+            tela,
+            "continuar",
+            pygame.Rect(280, 180, 400, 42),
             "[P / ESC]  Continuar Fase",
+            modo_alto_contraste,
+            destaque=True,
+        )
+        self._desenhar_botao(
+            tela,
+            "reiniciar",
+            pygame.Rect(280, 232, 400, 40),
             "[R]  Reiniciar Fase Atual",
-            f"[C]  Alto Contraste: {'ALTO' if modo_alto_contraste else 'NORMAL'}",
-            f"[F]  Fonte: {'GRANDE' if self.fonte_grande else 'NORMAL'}",
-            f"[M]  Áudio: {'ON' if audio_ativo else 'OFF'}   |   [N]  Música: {'ON' if (audio_ativo and musica_ativa) else 'OFF'}",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "contraste",
+            pygame.Rect(280, 282, 195, 40),
+            f"[C] Contraste: {'ALTO' if modo_alto_contraste else 'NORM'}",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "fonte",
+            pygame.Rect(485, 282, 195, 40),
+            f"[F] Fonte: {'G' if self.fonte_grande else 'N'}",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "audio",
+            pygame.Rect(280, 332, 195, 40),
+            f"[M] Som: {'ON' if audio_ativo else 'OFF'}",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "musica",
+            pygame.Rect(485, 332, 195, 40),
+            f"[N] Música: {'ON' if (audio_ativo and musica_ativa) else 'OFF'}",
+            modo_alto_contraste,
+        )
+        self._desenhar_botao(
+            tela,
+            "menu",
+            pygame.Rect(280, 392, 400, 40),
             "[Q]  Voltar ao Menu Principal",
-        ]
-        y = 224
-        for opcao in opcoes:
-            txt = self.fonte_media.render(opcao, True, cores["texto_principal"])
-            tela.blit(txt, txt.get_rect(center=(LARGURA // 2, y)))
-            y += 42
+            modo_alto_contraste,
+        )
 
     def desenhar_transicao(
         self,
@@ -608,64 +828,67 @@ class HUD:
         aprendizado_abnt: str,
         modo_alto_contraste: bool,
     ) -> None:
-        """Desenha a tela de TRANSICAO com métricas da fase e princípio da ABNT NBR 9050."""
+        """Desenha a tela de TRANSICAO com autonomia alcançada e nota ABNT NBR 9050."""
+        self.botoes_ativos.clear()
         cores = self.paleta(modo_alto_contraste)
         tela.fill(cores["fundo_tela"])
 
-        painel = pygame.Rect(84, 58, LARGURA - 168, ALTURA - 116)
-        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=14)
-        pygame.draw.rect(tela, cores["sucesso_borda"], painel, 3, border_radius=14)
+        painel = pygame.Rect(80, 50, LARGURA - 160, ALTURA - 100)
+        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=16)
+        pygame.draw.rect(tela, cores["sucesso_borda"], painel, 4, border_radius=16)
 
         titulo = self.fonte_titulo.render(
             f"FASE {resumo_fase['numero']} CONCLUÍDA!",
             True,
-            cores["sucesso_borda"],
+            cores["sucesso_fundo"] if not modo_alto_contraste else cores["sucesso_borda"],
         )
-        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 114)))
+        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 106)))
 
         sub = self.fonte_subtitulo.render(
-            str(resumo_fase["nome"]),
+            f"{resumo_fase['nome']}  —  {resumo_fase['autonomia_alcancada']}",
             True,
-            cores["texto_principal"],
+            cores["texto_escuro"],
         )
-        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 158)))
+        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 152)))
 
         estatisticas = (
             f"Intervenções: {resumo_fase['intervencoes']}   |   "
             f"Erros de Rota: {resumo_fase['erros_rota']}   |   "
             f"Tempo Restante: {resumo_fase['tempo_restante']}s"
         )
-        txt_est = self.fonte_media.render(estatisticas, True, cores["destaque_e"])
-        tela.blit(txt_est, txt_est.get_rect(center=(LARGURA // 2, 208)))
+        txt_est = self.fonte_media.render(estatisticas, True, cores["texto_suave_escuro"])
+        tela.blit(txt_est, txt_est.get_rect(center=(LARGURA // 2, 198)))
 
-        box_abnt = pygame.Rect(124, 248, LARGURA - 248, 190)
-        pygame.draw.rect(tela, cores["hud_fundo"], box_abnt, border_radius=10)
-        pygame.draw.rect(tela, cores["hud_borda"], box_abnt, 2, border_radius=10)
+        box_abnt = pygame.Rect(120, 236, LARGURA - 240, 196)
+        pygame.draw.rect(tela, cores["hud_fundo"], box_abnt, border_radius=12)
+        pygame.draw.rect(tela, cores["hud_borda"], box_abnt, 2, border_radius=12)
 
         cabecalho = self.fonte_media.render(
-            "PRINCÍPIO DE ACESSIBILIDADE — ABNT NBR 9050",
+            "PRINCÍPIO DE ACESSIBILIDADE — ABNT NBR 9050 / LBI",
             True,
             cores["destaque_e"],
         )
-        tela.blit(cabecalho, (box_abnt.x + 20, box_abnt.y + 18))
+        tela.blit(cabecalho, (box_abnt.x + 22, box_abnt.y + 18))
 
         self._desenhar_texto_quebrado(
             tela,
             aprendizado_abnt,
             self.fonte_normal,
             cores["texto_principal"],
-            box_abnt.x + 20,
+            box_abnt.x + 22,
             box_abnt.y + 54,
-            box_abnt.width - 40,
+            box_abnt.width - 44,
             espacamento=6,
         )
 
-        rodape = self.fonte_media.render(
+        self._desenhar_botao(
+            tela,
+            "avancar",
+            pygame.Rect(270, ALTURA - 122, 420, 46),
             "[ENTER / ESPAÇO]  Avançar para a Próxima Fase",
-            True,
-            cores["destaque_e"],
+            modo_alto_contraste,
+            destaque=True,
         )
-        tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 96)))
 
     def desenhar_fim(
         self,
@@ -675,44 +898,46 @@ class HUD:
         modo_alto_contraste: bool,
     ) -> None:
         """Desenha o relatório final (FIM) de impacto e evolução por fase."""
+        self.botoes_ativos.clear()
         cores = self.paleta(modo_alto_contraste)
         tela.fill(cores["fundo_tela"])
 
-        cor_destaque = cores["sucesso_borda"] if vitoria else cores["erro_borda"]
-        painel = pygame.Rect(52, 42, LARGURA - 104, ALTURA - 84)
-        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=14)
-        pygame.draw.rect(tela, cor_destaque, painel, 3, border_radius=14)
+        cor_borda = cores["sucesso_borda"] if vitoria else cores["erro_borda"]
+        cor_titulo = (
+            cores["sucesso_fundo"]
+            if (vitoria and not modo_alto_contraste)
+            else (cores["erro_fundo"] if (not vitoria and not modo_alto_contraste) else cor_borda)
+        )
+
+        painel = pygame.Rect(46, 36, LARGURA - 92, ALTURA - 72)
+        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=16)
+        pygame.draw.rect(tela, cor_borda, painel, 4, border_radius=16)
 
         titulo_texto = (
-            "CAMPANHA CONCLUÍDA — AUTONOMIA GARANTIDA!"
+            "VILA NOVA MAIS ACESSÍVEL — CAMPANHA CONCLUÍDA!"
             if vitoria
             else "TEMPO ESGOTADO — ROTA AINDA BLOQUEADA"
         )
-        titulo = self.fonte_subtitulo.render(titulo_texto, True, cor_destaque)
-        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 84)))
+        titulo = self.fonte_subtitulo.render(titulo_texto, True, cor_titulo)
+        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 78)))
 
         sub_texto = (
             "Relatório de impacto: barreiras removidas e evolução da autonomia por fase."
             if vitoria
             else "Observe os obstáculos fixos antes de investir os recursos disponíveis."
         )
-        sub = self.fonte_normal.render(sub_texto, True, cores["texto_secundario"])
-        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 120)))
+        sub = self.fonte_normal.render(sub_texto, True, cores["texto_suave_escuro"])
+        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 114)))
 
-        # Tabela de métricas observáveis
-        cab_y = 166
-        colunas_x = (76, 345, 550, 650, 745, 825)
+        cab_y = 158
+        colunas_x = (70, 338, 560, 660, 750, 830)
         cabecalhos = ("Fase", "Autonomia", "Interv.", "Erros", "Testes", "Tempo")
         for x, texto in zip(colunas_x, cabecalhos):
-            render = self.fonte_media.render(texto, True, cores["destaque_e"])
+            render = self.fonte_media.render(texto, True, cores["texto_escuro"])
             tela.blit(render, (x, cab_y))
 
         pygame.draw.line(
-            tela,
-            cores["painel_borda"],
-            (72, cab_y + 28),
-            (LARGURA - 72, cab_y + 28),
-            2,
+            tela, cores["painel_borda"], (68, cab_y + 28), (LARGURA - 68, cab_y + 28), 2
         )
 
         y = cab_y + 42
@@ -720,7 +945,11 @@ class HUD:
         total_erros = 0
         for metrica in metricas_fases:
             concluida = bool(metrica["concluida"])
-            cor_status = cores["sucesso_borda"] if concluida else cores["erro_borda"]
+            cor_status = (
+                cores["sucesso_fundo"]
+                if (concluida and not modo_alto_contraste)
+                else (cores["erro_fundo"] if (not concluida and not modo_alto_contraste) else (cores["sucesso_borda"] if concluida else cores["erro_borda"]))
+            )
 
             total_interv += int(metrica["intervencoes"])
             total_erros += int(metrica["erros_rota"])
@@ -734,7 +963,7 @@ class HUD:
                 f"{metrica['tempo_restante']}s",
             )
             for idx, (x, val) in enumerate(zip(colunas_x, valores)):
-                cor_val = cor_status if idx == 1 else cores["texto_principal"]
+                cor_val = cor_status if idx == 1 else cores["texto_escuro"]
                 render = self.fonte_normal.render(val, True, cor_val)
                 tela.blit(render, (x, y))
             y += 38
@@ -742,19 +971,32 @@ class HUD:
         resumo = self.fonte_media.render(
             f"Resumo Geral — Intervenções: {total_interv}   |   Erros de Rota: {total_erros}",
             True,
-            cores["texto_principal"],
+            cores["texto_escuro"],
         )
-        tela.blit(resumo, resumo.get_rect(center=(LARGURA // 2, 434)))
+        tela.blit(resumo, resumo.get_rect(center=(LARGURA // 2, 430)))
 
-        acao_r = (
-            "[R] Jogar Novamente" if vitoria else "[R] Reiniciar Fase Atual"
+        self._desenhar_botao(
+            tela,
+            "reiniciar",
+            pygame.Rect(160, ALTURA - 116, 280, 44),
+            "[R] Jogar Novamente" if vitoria else "[R] Reiniciar Fase",
+            modo_alto_contraste,
+            destaque=True,
         )
-        rodape = self.fonte_media.render(
-            f"{acao_r}     |     [ENTER] Menu Principal     |     [ESC] Sair",
-            True,
-            cores["destaque_e"],
+        self._desenhar_botao(
+            tela,
+            "menu",
+            pygame.Rect(460, ALTURA - 116, 220, 44),
+            "[ENTER] Menu",
+            modo_alto_contraste,
         )
-        tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 78)))
+        self._desenhar_botao(
+            tela,
+            "sair",
+            pygame.Rect(700, ALTURA - 116, 120, 44),
+            "[ESC] Sair",
+            modo_alto_contraste,
+        )
 
     def desenhar_mapa_fases(
         self,
@@ -765,61 +1007,62 @@ class HUD:
         indice_selecionado: int,
         modo_alto_contraste: bool,
     ) -> None:
-        """Desenha o estado MAPA com rota urbana estilizada e seleção de fases.
-
-        Args:
-            tela: Superfície principal do jogo.
-            lista_fases: Lista de metadados das 4 fases da campanha.
-            fases_desbloqueadas: Quantidade de fases desbloqueadas (1 a 4).
-            registros_salvos: Histórico salvo por número de fase (selos/status).
-            indice_selecionado: Índice da fase atualmente destacada (0 a 3).
-            modo_alto_contraste: Estado do modo de alto contraste.
-        """
+        """Desenha o estado MAPA com rota urbana estilizada e cartões clicáveis."""
+        self.botoes_ativos.clear()
         cores = self.paleta(modo_alto_contraste)
         tela.fill(cores["fundo_tela"])
 
-        painel = pygame.Rect(38, 28, LARGURA - 76, ALTURA - 56)
-        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=14)
+        painel = pygame.Rect(34, 24, LARGURA - 68, ALTURA - 48)
+        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=16)
         pygame.draw.rect(
             tela,
             cores["painel_borda"],
             painel,
             BORDA_ALTO_CONTRASTE if modo_alto_contraste else 3,
-            border_radius=14,
+            border_radius=16,
         )
 
         titulo = self.fonte_subtitulo.render(
-            "MAPA URBANO — SELECIONE UMA ROTA", True, cores["destaque_e"]
+            "MAPA DE VILA NOVA — SELECIONE UMA ROTA",
+            True,
+            cores["texto_escuro"],
         )
-        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 66)))
+        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 60)))
 
         sub = self.fonte_normal.render(
-            "Navegue com Setas / WASD ou teclas [1]–[4] e pressione [ENTER] para iniciar.",
+            "Clique em uma fase desbloqueada ou use Setas / WASD / teclas [1]–[4] + [ENTER].",
             True,
-            cores["texto_secundario"],
+            cores["texto_suave_escuro"],
         )
-        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 98)))
+        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 92)))
 
-        # Linha urbana conectando os 4 cartões de fase (layout 2x2)
-        centros = [(265, 225), (695, 225), (265, 425), (695, 425)]
+        centros = [(265, 222), (695, 222), (265, 412), (695, 412)]
         pygame.draw.lines(tela, cores["hud_borda"], False, centros, 6)
 
+        pos_mouse = pygame.mouse.get_pos()
         for idx, fase in enumerate(lista_fases):
             numero = int(fase["numero"])
             desbloqueada = numero <= fases_desbloqueadas
-            selecionada = idx == indice_selecionado
             registro = registros_salvos.get(numero, {})
             concluida = bool(registro.get("concluida", False))
             selos = int(registro.get("melhor_selos", 0))
             nivel = str(registro.get("melhor_nivel", ""))
 
             cx, cy = centros[idx]
-            cartao = pygame.Rect(0, 0, 380, 152)
+            cartao = pygame.Rect(0, 0, 390, 150)
             cartao.center = (cx, cy)
+            self.botoes_ativos[f"fase_{idx}"] = cartao
 
-            cor_fundo = cores["botao_fundo"] if desbloqueada else cores["hud_fundo"]
+            hover = cartao.collidepoint(pos_mouse)
+            selecionada = idx == indice_selecionado or hover
+
+            cor_fundo = (
+                cores["botao_hover"]
+                if (desbloqueada and selecionada)
+                else (cores["botao_fundo"] if desbloqueada else cores["calcada_escura"])
+            )
             if selecionada:
-                cor_borda = cores["destaque_e"]
+                cor_borda = cores["destaque_e"] if modo_alto_contraste else cores["botao_borda"]
                 espessura = 4
             elif concluida:
                 cor_borda = cores["sucesso_borda"]
@@ -828,47 +1071,57 @@ class HUD:
                 cor_borda = cores["painel_borda"]
                 espessura = 2
 
-            pygame.draw.rect(tela, cor_fundo, cartao, border_radius=10)
-            pygame.draw.rect(tela, cor_borda, cartao, espessura, border_radius=10)
+            pygame.draw.rect(tela, cor_fundo, cartao, border_radius=12)
+            pygame.draw.rect(tela, cor_borda, cartao, espessura, border_radius=12)
 
             cab = f"[{numero}] {fase['nome']}"
-            cor_cab = cores["destaque_e"] if selecionada else cores["texto_principal"]
-            tela.blit(self.fonte_media.render(cab, True, cor_cab), (cartao.x + 16, cartao.y + 14))
-
-            perfil = str(fase["perfil_morador"])
             tela.blit(
-                self.fonte_pequena.render(perfil, True, cores["texto_secundario"]),
+                self.fonte_media.render(cab, True, cores["texto_escuro"]),
+                (cartao.x + 16, cartao.y + 14),
+            )
+            tela.blit(
+                self.fonte_pequena.render(
+                    str(fase["perfil_morador"]), True, cores["texto_suave_escuro"]
+                ),
                 (cartao.x + 16, cartao.y + 44),
             )
-
             info_orc = f"Tempo: {int(float(fase['tempo']))}s   |   Orçamento: {fase['recursos']} rec"
             tela.blit(
-                self.fonte_pequena.render(info_orc, True, cores["texto_principal"]),
+                self.fonte_pequena.render(info_orc, True, cores["texto_escuro"]),
                 (cartao.x + 16, cartao.y + 72),
             )
 
             if not desbloqueada:
                 status_txt = "[BLOQUEADA] Conclua a fase anterior"
-                cor_st = cores["erro_borda"]
+                cor_st = cores["erro_fundo"] if not modo_alto_contraste else cores["erro_borda"]
             elif concluida:
                 selos_visuais = "★" * selos + "☆" * (3 - selos)
                 status_txt = f"{nivel} ({selos}/3) {selos_visuais}"
-                cor_st = cores["sucesso_borda"]
+                cor_st = cores["sucesso_fundo"] if not modo_alto_contraste else cores["sucesso_borda"]
             else:
-                status_txt = "[DISPONÍVEL] Pronta para iniciar"
-                cor_st = cores["rota_preview"]
+                status_txt = "[DISPONÍVEL] Clique ou aperte ENTER"
+                cor_st = cores["partida_marcador"]
 
             tela.blit(
                 self.fonte_pequena.render(status_txt, True, cor_st),
                 (cartao.x + 16, cartao.y + 106),
             )
 
-        rodape = self.fonte_media.render(
-            "[ENTER / ESPAÇO] Jogar Fase Selecionada     |     [ESC / BACKSPACE] Voltar ao Menu",
-            True,
-            cores["destaque_e"],
+        self._desenhar_botao(
+            tela,
+            "jogar_selecionada",
+            pygame.Rect(210, ALTURA - 84, 270, 40),
+            "[ENTER] Jogar Selecionada",
+            modo_alto_contraste,
+            destaque=True,
         )
-        tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 58)))
+        self._desenhar_botao(
+            tela,
+            "menu",
+            pygame.Rect(500, ALTURA - 84, 250, 40),
+            "[ESC] Voltar ao Menu",
+            modo_alto_contraste,
+        )
 
     def desenhar_creditos(
         self,
@@ -876,38 +1129,38 @@ class HUD:
         modo_alto_contraste: bool,
     ) -> None:
         """Desenha a tela CREDITOS com autores, acessibilidade e referências técnicas."""
+        self.botoes_ativos.clear()
         cores = self.paleta(modo_alto_contraste)
         tela.fill(cores["fundo_tela"])
 
-        painel = pygame.Rect(48, 30, LARGURA - 96, ALTURA - 60)
-        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=14)
+        painel = pygame.Rect(44, 26, LARGURA - 88, ALTURA - 52)
+        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=16)
         pygame.draw.rect(
             tela,
             cores["painel_borda"],
             painel,
             BORDA_ALTO_CONTRASTE if modo_alto_contraste else 3,
-            border_radius=14,
+            border_radius=16,
         )
 
         titulo = self.fonte_subtitulo.render(
             "CRÉDITOS E REFERÊNCIAS — ROTA ACESSÍVEL",
             True,
-            cores["destaque_e"],
+            cores["texto_escuro"],
         )
-        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 68)))
+        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 64)))
 
         sub = self.fonte_normal.render(
             "Serious Game — Engenharia de Software (7º Período) | Tema 07: Acessibilidade e Inclusão",
             True,
-            cores["texto_secundario"],
+            cores["texto_suave_escuro"],
         )
-        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 102)))
+        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 96)))
 
-        # Coluna esquerda: Equipe de Desenvolvimento
-        x_esq = 82
+        x_esq = 76
         tela.blit(
-            self.fonte_media.render("EQUIPE DO PROJETO (5 INTEGRANTES)", True, cores["destaque_e"]),
-            (x_esq, 146),
+            self.fonte_media.render("EQUIPE DO PROJETO (5 INTEGRANTES)", True, cores["texto_escuro"]),
+            (x_esq, 138),
         )
         autores = [
             "• Felipe-dev021 — Arquitetura, Main Loop e Persistência",
@@ -916,31 +1169,29 @@ class HUD:
             "• GuiMell0 — Algoritmo BFS, Fases e Autonomia",
             "• Gabriel-dev10 — HUD, Mapa Urbano, Créditos e Docs",
         ]
-        y = 180
+        y = 172
         for autor in autores:
-            tela.blit(self.fonte_normal.render(autor, True, cores["texto_principal"]), (x_esq, y))
-            y += 30
+            tela.blit(self.fonte_normal.render(autor, True, cores["texto_escuro"]), (x_esq, y))
+            y += 28
 
-        # Coluna esquerda inferior: Referências Técnicas
         tela.blit(
-            self.fonte_media.render("REFERÊNCIAS TÉCNICAS", True, cores["destaque_e"]),
-            (x_esq, 354),
+            self.fonte_media.render("REFERÊNCIAS TÉCNICAS", True, cores["texto_escuro"]),
+            (x_esq, 336),
         )
         referencias = [
             "• ABNT NBR 9050:2020 — Acessibilidade a edificações e vias",
             "• Lei nº 13.146/2015 — Lei Brasileira de Inclusão (LBI)",
             "• W3C WCAG 2.1 — Diretrizes de Acessibilidade de Conteúdo",
         ]
-        y_ref = 388
+        y_ref = 370
         for ref in referencias:
-            tela.blit(self.fonte_normal.render(ref, True, cores["texto_principal"]), (x_esq, y_ref))
-            y_ref += 30
+            tela.blit(self.fonte_normal.render(ref, True, cores["texto_escuro"]), (x_esq, y_ref))
+            y_ref += 28
 
-        # Coluna direita: Recursos de Acessibilidade no Próprio Jogo
         x_dir = 548
         tela.blit(
-            self.fonte_media.render("ACESSIBILIDADE NO JOGO", True, cores["destaque_e"]),
-            (x_dir, 146),
+            self.fonte_media.render("ACESSIBILIDADE NO JOGO", True, cores["texto_escuro"]),
+            (x_dir, 138),
         )
         acess = [
             "• [C] Modo Alto Contraste com siglas",
@@ -949,16 +1200,18 @@ class HUD:
             "• [N] Silenciar apenas música de fundo",
             "• [P] Pausa sem limite de tempo",
             "• Sem flashes fortes ou tremor de tela",
-            "• Nenhum alerta depende só de som ou cor",
+            "• Suporte completo a teclado e mouse",
         ]
-        y_ac = 180
+        y_ac = 172
         for item in acess:
-            tela.blit(self.fonte_normal.render(item, True, cores["texto_principal"]), (x_dir, y_ac))
-            y_ac += 30
+            tela.blit(self.fonte_normal.render(item, True, cores["texto_escuro"]), (x_dir, y_ac))
+            y_ac += 28
 
-        rodape = self.fonte_media.render(
-            "[ESC / BACKSPACE / ENTER]  Voltar ao Menu Principal",
-            True,
-            cores["destaque_e"],
+        self._desenhar_botao(
+            tela,
+            "menu",
+            pygame.Rect(330, ALTURA - 96, 300, 42),
+            "[ESC / ENTER]  Voltar ao Menu",
+            modo_alto_contraste,
+            destaque=True,
         )
-        tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 60)))
