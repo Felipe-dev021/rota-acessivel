@@ -35,6 +35,7 @@ from config import (
 from fase import GerenciadorFases
 from hud import HUD
 from morador import Morador
+from particulas import SistemaParticulas
 from player import Jogador
 
 
@@ -56,6 +57,7 @@ class JogoRotaAcessivel:
 
         self.sons: Dict[str, Optional[pygame.mixer.Sound]] = self._carregar_sons()
         self.hud: HUD = HUD()
+        self.particulas: SistemaParticulas = SistemaParticulas()
         self.fases: GerenciadorFases = GerenciadorFases()
         self.fases.carregar_fase(0, self.modo_alto_contraste)
 
@@ -127,6 +129,7 @@ class JogoRotaAcessivel:
         self.morador.cancelar_teste()
         self.morador.reposicionar(*self.fases.inicio_morador)
         self._reconstruir_grupo_desenho()
+        self.particulas.limpar()
         self.hud.limpar_feedback()
 
     def _alternar_contraste(self) -> None:
@@ -185,12 +188,17 @@ class JogoRotaAcessivel:
             )
             return
 
+        centro_barreira = barreira.centro()
+        cor_particula = self.hud.paleta(self.modo_alto_contraste)["sucesso_borda"]
         resolvida, mensagem = barreira.resolver(self.modo_alto_contraste)
         if resolvida:
             self.fases.recursos -= barreira.custo
             self.fases.intervencoes_fase += 1
             if not barreira.alteravel and barreira in self.fases.grupo_interativos:
                 self.fases.grupo_interativos.remove(barreira)
+            self.particulas.emitir_intervencao(
+                centro_barreira[0], centro_barreira[1], cor_particula[:3]
+            )
             self._tocar_som("acao")
             self.hud.definir_feedback(mensagem, "OK", DURACAO_FEEDBACK)
 
@@ -330,6 +338,7 @@ class JogoRotaAcessivel:
             return
 
         self.hud.atualizar(dt)
+        self.particulas.atualizar(dt)
         self.fases.tempo_restante -= dt
         self.grupo_desenho.update(dt)
 
@@ -345,6 +354,16 @@ class JogoRotaAcessivel:
         resultado_teste = self.morador.consumir_resultado()
         if resultado_teste == "VITORIA":
             self.jogador.movimento_habilitado = True
+            cores_paleta = self.hud.paleta(self.modo_alto_contraste)
+            self.particulas.emitir_vitoria(
+                self.morador.rect.centerx,
+                self.morador.rect.centery,
+                (
+                    cores_paleta["sucesso_borda"][:3],
+                    cores_paleta["destaque_e"][:3],
+                    cores_paleta["rota_preview"][:3],
+                ),
+            )
             self._tocar_som("vitoria")
             self.ultimo_resumo_fase = self.fases.registrar_metricas_fase(concluida=True)
             if self.fases.indice_atual + 1 < self.fases.total_fases:
@@ -377,9 +396,22 @@ class JogoRotaAcessivel:
                 self._tratar_fim_por_tempo()
 
     def _desenhar_cena_jogo(self) -> None:
-        """Desenha a calçada, os sprites do grupo_desenho único e o HUD."""
+        """Desenha a calçada, rastro do Morador, sprites, partículas e HUD."""
         self.hud.desenhar_grade_calcada(self.tela, self.modo_alto_contraste)
+        self.hud.desenhar_rastro_morador(
+            self.tela,
+            self.morador.celulas_percorridas,
+            self.morador.rota_sucesso,
+            self.modo_alto_contraste,
+        )
         self.grupo_desenho.draw(self.tela)
+        self.hud.desenhar_marcadores_rota(
+            self.tela,
+            self.fases.inicio_morador,
+            self.fases.destino,
+            self.modo_alto_contraste,
+        )
+        self.particulas.desenhar(self.tela)
 
         if not self.morador.em_movimento:
             barreira_proxima = self.jogador.obter_barreira_proxima(

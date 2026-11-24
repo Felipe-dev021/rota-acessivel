@@ -6,6 +6,7 @@ o destaque de interação '[E]' e as telas completas de MENU, INSTRUCOES, PAUSA,
 TRANSICAO e FIM com suporte integral ao Modo Alto Contraste.
 """
 
+import math
 from typing import Dict, List, Optional, Tuple
 
 import pygame
@@ -59,6 +60,7 @@ class HUD:
         self.mensagem_feedback: str = ""
         self.tipo_feedback: str = "OK"
         self.tempo_feedback: float = 0.0
+        self.tempo_animacao: float = 0.0
 
         self._miniaturas_legenda: Dict[str, pygame.Surface] = {}
         self._carregar_miniaturas_legenda()
@@ -114,11 +116,12 @@ class HUD:
         self.tempo_feedback = 0.0
 
     def atualizar(self, dt: float) -> None:
-        """Decrementa o temporizador do feedback inferior usando dt.
+        """Atualiza o temporizador do feedback inferior e o relógio de animações.
 
         Args:
             dt: Tempo decorrido em segundos desde o frame anterior.
         """
+        self.tempo_animacao += dt
         if self.tempo_feedback > 0.0:
             self.tempo_feedback = max(0.0, self.tempo_feedback - dt)
             if self.tempo_feedback == 0.0:
@@ -188,27 +191,103 @@ class HUD:
                 pygame.draw.rect(tela, cor, ret)
                 pygame.draw.rect(tela, cores["grade_linha"], ret, 1)
 
+    def desenhar_marcadores_rota(
+        self,
+        tela: pygame.Surface,
+        inicio_morador: Tuple[int, int],
+        destino: Tuple[int, int],
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Desenha marcações visuais nítidas de PARTIDA e DESTINO sobre a calçada.
+
+        Args:
+            tela: Superfície principal do jogo.
+            inicio_morador: Célula (col, lin) de partida do Morador.
+            destino: Célula (col, lin) do destino da fase.
+            modo_alto_contraste: Estado atual do modo de alto contraste.
+        """
+        cores = self.paleta(modo_alto_contraste)
+        marcadores = (
+            (inicio_morador, "PARTIDA", cores["partida_marcador"]),
+            (destino, "DESTINO", cores["destino_marcador"]),
+        )
+        for (col, lin), rotulo, cor_fundo in marcadores:
+            cx = col * TILE + TILE // 2
+            topo_tile = HUD_ALTURA + lin * TILE
+            cor_texto = (
+                cores["destaque_e_texto"]
+                if modo_alto_contraste
+                else cores["texto_principal"]
+            )
+            txt = self.fonte_pequena.render(rotulo, True, cor_texto)
+            caixa = txt.get_rect(midbottom=(cx, max(HUD_ALTURA + 20, topo_tile - 2)))
+            caixa.clamp_ip(
+                pygame.Rect(4, HUD_ALTURA + 2, LARGURA - 8, ALTURA - HUD_ALTURA - 4)
+            )
+            fundo = caixa.inflate(8, 4)
+            pygame.draw.rect(tela, cor_fundo, fundo, border_radius=4)
+            pygame.draw.rect(tela, cores["tile_borda"], fundo, 1, border_radius=4)
+            tela.blit(txt, caixa)
+
+    def desenhar_rastro_morador(
+        self,
+        tela: pygame.Surface,
+        celulas_percorridas: List[Tuple[int, int]],
+        rota_sucesso: bool,
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Desenha um rastro pontilhado mostrando o trajeto percorrido pelo Morador.
+
+        Args:
+            tela: Superfície principal do jogo.
+            celulas_percorridas: Lista de células (col, lin) já atravessadas.
+            rota_sucesso: True destaca em verde de rota livre; False em azul-alerta.
+            modo_alto_contraste: Estado atual do modo de alto contraste.
+        """
+        if len(celulas_percorridas) < 2:
+            return
+        cores = self.paleta(modo_alto_contraste)
+        cor_rastro = cores["rota_livre"] if rota_sucesso else cores["rota_preview"]
+
+        for indice in range(len(celulas_percorridas) - 1):
+            c1, l1 = celulas_percorridas[indice]
+            c2, l2 = celulas_percorridas[indice + 1]
+            x1 = c1 * TILE + TILE // 2
+            y1 = HUD_ALTURA + l1 * TILE + TILE // 2
+            x2 = c2 * TILE + TILE // 2
+            y2 = HUD_ALTURA + l2 * TILE + TILE // 2
+
+            for passo in range(3):
+                t = passo / 3.0
+                px = round(x1 + (x2 - x1) * t)
+                py = round(y1 + (y2 - y1) * t)
+                pygame.draw.circle(tela, cor_rastro, (px, py), 5)
+                pygame.draw.circle(tela, cores["tile_borda"], (px, py), 5, 1)
+
     def desenhar_destaque_interacao(
         self,
         tela: pygame.Surface,
         barreira: Optional[Barreira],
         modo_alto_contraste: bool,
     ) -> None:
-        """Desenha a moldura de destaque '[E] + ação e custo' sobre a barreira próxima."""
+        """Desenha moldura pulsante senoidal '[E] + ação e custo' sobre a barreira próxima."""
         if barreira is None:
             return
         cores = self.paleta(modo_alto_contraste)
-        pygame.draw.rect(tela, cores["destaque_e"], barreira.rect, 4, border_radius=6)
+        pulso = 0.5 + 0.5 * math.sin(self.tempo_animacao * 5.0)
+        expansao = round(2 + 4 * pulso)
+        espessura = 3 + round(2 * pulso)
+        ret_pulsante = barreira.rect.inflate(expansao, expansao)
+        pygame.draw.rect(tela, cores["destaque_e"], ret_pulsante, espessura, border_radius=7)
 
         etiqueta = barreira.texto_prompt_interacao()
         texto = self.fonte_pequena.render(etiqueta, True, cores["destaque_e_texto"])
         caixa = texto.get_rect(
             midbottom=(
                 barreira.rect.centerx,
-                max(HUD_ALTURA + 24, barreira.rect.top - 3),
+                max(HUD_ALTURA + 24, ret_pulsante.top - 3),
             )
         )
-        # Mantém a etiqueta dentro dos limites horizontais da janela
         caixa.clamp_ip(pygame.Rect(8, HUD_ALTURA + 4, LARGURA - 16, ALTURA - HUD_ALTURA - 8))
         caixa_fundo = caixa.inflate(12, 6)
         pygame.draw.rect(tela, cores["destaque_e"], caixa_fundo, border_radius=5)
