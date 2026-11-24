@@ -22,6 +22,7 @@ from config import (
     ARQUIVO_IMG_POSTE,
     ARQUIVO_IMG_RAMPA,
     ARQUIVO_IMG_SEM_PISO_TATIL,
+    BORDA_ALTO_CONTRASTE,
     CORES_ALTO_CONTRASTE,
     CUSTO_AVISO_SONORO,
     CUSTO_BURACO,
@@ -351,7 +352,11 @@ class Barreira(pygame.sprite.Sprite):
                 superficie, cor_fundo, (2, 2, TILE - 4, TILE - 4), border_radius=5
             )
             pygame.draw.rect(
-                superficie, cor_borda, (2, 2, TILE - 4, TILE - 4), 3, border_radius=5
+                superficie,
+                cor_borda,
+                (2, 2, TILE - 4, TILE - 4),
+                BORDA_ALTO_CONTRASTE,
+                border_radius=5,
             )
 
             fonte = self._obter_fonte_sigla(fonte_grande)

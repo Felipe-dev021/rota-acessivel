@@ -177,22 +177,25 @@ AUDIO_VOLUME_MUSICA = 0.25
 FONTE_FAMILIA = "arial"
 
 FONTES_NORMAL = {
-    "titulo": 36,
-    "subtitulo": 21,
-    "media": 17,
-    "normal": 15,
+    "titulo": 34,
+    "subtitulo": 20,
+    "media": 16,
+    "normal": 14,
     "pequena": 13,
     "sigla": 18,
 }
 
 FONTES_GRANDE = {
-    "titulo": 42,
-    "subtitulo": 24,
-    "media": 20,
-    "normal": 18,
+    "titulo": 38,
+    "subtitulo": 23,
+    "media": 18,
+    "normal": 16,
     "pequena": 15,
-    "sigla": 22,
+    "sigla": 21,
 }
+
+# Espessura da borda de alto contraste nos tiles
+BORDA_ALTO_CONTRASTE = 4
 
 # =============================================================================
 # PALETAS DE CORES (MODO NORMAL E MODO ALTO CONTRASTE — TECLA [C])

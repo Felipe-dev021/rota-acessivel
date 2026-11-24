@@ -54,6 +54,7 @@ class JogoRotaAcessivel:
         self.executando: bool = True
         self.estado: str = ESTADO_MENU
         self.modo_alto_contraste: bool = False
+        self.fonte_grande: bool = False
         self.audio_ativo: bool = True
         self.musica_ativa: bool = True
         self.vitoria_campanha: bool = False
@@ -165,9 +166,22 @@ class JogoRotaAcessivel:
     def _alternar_contraste(self) -> None:
         """Alterna o Modo Alto Contraste em tempo real em qualquer tela."""
         self.modo_alto_contraste = not self.modo_alto_contraste
-        self.fases.atualizar_visual_barreiras(self.modo_alto_contraste)
-        self.jogador.atualizar_visual(self.modo_alto_contraste)
-        self.morador.atualizar_visual(self.modo_alto_contraste)
+        self.fases.atualizar_visual_barreiras(
+            self.modo_alto_contraste, self.fonte_grande
+        )
+        self.jogador.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
+        self.morador.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
+        self._tocar_som("clique")
+
+    def _alternar_fonte(self) -> None:
+        """Alterna o tamanho da fonte (Normal / Grande) em tempo real."""
+        self.fonte_grande = not self.fonte_grande
+        self.hud.atualizar_fontes(self.fonte_grande)
+        self.fases.atualizar_visual_barreiras(
+            self.modo_alto_contraste, self.fonte_grande
+        )
+        self.jogador.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
+        self.morador.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
         self._tocar_som("clique")
 
     def _alternar_audio(self) -> None:
@@ -177,10 +191,16 @@ class JogoRotaAcessivel:
         if self.audio_ativo:
             self._tocar_som("clique")
 
+    def _alternar_musica(self) -> None:
+        """Ativa ou silencia exclusivamente a trilha sonora de fundo."""
+        self.musica_ativa = not self.musica_ativa
+        self._atualizar_volume_musica()
+        self._tocar_som("clique")
+
     def _iniciar_nova_campanha(self) -> None:
         """Inicia uma nova campanha a partir da Fase 1."""
         self.vitoria_campanha = False
-        self.fases.reiniciar_campanha(self.modo_alto_contraste)
+        self.fases.reiniciar_campanha(self.modo_alto_contraste, self.fonte_grande)
         self._sincronizar_fase_atual()
         self.estado = ESTADO_JOGANDO
         self.hud.definir_feedback(
@@ -191,7 +211,7 @@ class JogoRotaAcessivel:
 
     def _reiniciar_fase_atual(self) -> None:
         """Reinicia integralmente a fase atual e retorna ao estado JOGANDO."""
-        self.fases.reiniciar_fase(self.modo_alto_contraste)
+        self.fases.reiniciar_fase(self.modo_alto_contraste, self.fonte_grande)
         self._sincronizar_fase_atual()
         self.estado = ESTADO_JOGANDO
         self._tocar_som("clique")
@@ -221,7 +241,9 @@ class JogoRotaAcessivel:
 
         centro_barreira = barreira.centro()
         cor_particula = self.hud.paleta(self.modo_alto_contraste)["sucesso_borda"]
-        resolvida, mensagem = barreira.resolver(self.modo_alto_contraste)
+        resolvida, mensagem = barreira.resolver(
+            self.modo_alto_contraste, self.fonte_grande
+        )
         if resolvida:
             self.fases.recursos -= barreira.custo
             self.fases.intervencoes_fase += 1
@@ -273,8 +295,14 @@ class JogoRotaAcessivel:
             if tecla == pygame.K_c:
                 self._alternar_contraste()
                 continue
+            if tecla == pygame.K_f:
+                self._alternar_fonte()
+                continue
             if tecla == pygame.K_m:
                 self._alternar_audio()
+                continue
+            if tecla == pygame.K_n:
+                self._alternar_musica()
                 continue
 
             if self.estado == ESTADO_MENU:
@@ -337,7 +365,7 @@ class JogoRotaAcessivel:
         """Trata comandos de teclado no estado TRANSICAO."""
         if tecla in (pygame.K_RETURN, pygame.K_SPACE):
             self._tocar_som("clique")
-            if self.fases.avancar_fase(self.modo_alto_contraste):
+            if self.fases.avancar_fase(self.modo_alto_contraste, self.fonte_grande):
                 self._sincronizar_fase_atual()
                 self.estado = ESTADO_JOGANDO
                 self.hud.definir_feedback(
@@ -463,6 +491,7 @@ class JogoRotaAcessivel:
             self.modo_alto_contraste,
             self.audio_ativo,
             self.morador.em_movimento,
+            self.musica_ativa,
         )
         self.hud.desenhar_feedback_inferior(self.tela, self.modo_alto_contraste)
 
@@ -470,7 +499,10 @@ class JogoRotaAcessivel:
         """Desenha a tela correspondente ao estado ativo da máquina de estados."""
         if self.estado == ESTADO_MENU:
             self.hud.desenhar_menu(
-                self.tela, self.modo_alto_contraste, self.audio_ativo
+                self.tela,
+                self.modo_alto_contraste,
+                self.audio_ativo,
+                self.musica_ativa,
             )
         elif self.estado == ESTADO_INSTRUCOES:
             self.hud.desenhar_instrucoes(self.tela, self.modo_alto_contraste)
@@ -479,7 +511,10 @@ class JogoRotaAcessivel:
         elif self.estado == ESTADO_PAUSA:
             self._desenhar_cena_jogo()
             self.hud.desenhar_pausa(
-                self.tela, self.modo_alto_contraste, self.audio_ativo
+                self.tela,
+                self.modo_alto_contraste,
+                self.audio_ativo,
+                self.musica_ativa,
             )
         elif self.estado == ESTADO_TRANSICAO:
             self.hud.desenhar_transicao(
