@@ -1,9 +1,9 @@
-"""Módulo da entidade jogável Alex (agente de acessibilidade) de 'Rota Acessível'.
+"""Módulo da entidade jogável Alex (agente de acessibilidade de Maricá/RJ).
 
-Implementa a classe Jogador (herdeira de pygame.sprite.Sprite) com movimentação
-fluida em 8 direções, aceleração suave, assistência automática de deslizamento
-em quinas (corner-nudging), animação leve de passos e detecção de barreiras
-alteráveis dentro do raio de interação.
+Implementa a classe Jogador (herdeira de pygame.sprite.Sprite) com resposta
+imediata em 8 direções, corrida ágil segurando SHIFT (Sprint), deslizamento
+automático suave em quinas (corner-nudging), animação leve de passos e detecção
+de barreiras alteráveis dentro do raio de interação.
 """
 
 import math
@@ -13,7 +13,6 @@ import pygame
 
 from barreira import Barreira
 from config import (
-    ACELERACAO_JOGADOR,
     ALTURA,
     ARQUIVO_IMG_PLAYER,
     CORES_ALTO_CONTRASTE,
@@ -27,12 +26,13 @@ from config import (
     RAIO_INTERACAO,
     TILE,
     VELOCIDADE_JOGADOR,
+    VELOCIDADE_SPRINT,
     caminho_arquivo,
 )
 
 
 class Jogador(pygame.sprite.Sprite):
-    """Controla Alex, o agente urbano que explora a calçada e aplica intervenções."""
+    """Controla Alex, o agente urbano que percorre e adapta as calçadas de Maricá."""
 
     def __init__(
         self,
@@ -42,22 +42,14 @@ class Jogador(pygame.sprite.Sprite):
         modo_alto_contraste: bool = False,
         fonte_grande: bool = False,
     ) -> None:
-        """Inicializa Alex na célula informada da grade urbana.
-
-        Args:
-            coluna: Coluna inicial na grade (0 a COLS - 1).
-            linha: Linha inicial na grade (0 a ROWS - 1).
-            grupo_solidos: Grupo de sprites sólidos (postes fixos) para colisão.
-            modo_alto_contraste: Define o estilo visual inicial.
-            fonte_grande: Define a escala de fonte da sigla no alto contraste.
-        """
+        """Inicializa Alex na célula informada da calçada."""
         super().__init__()
         self.pos_x: float = float(coluna * TILE)
         self.pos_y: float = float(HUD_ALTURA + linha * TILE)
-        self.vel_x: float = 0.0
-        self.vel_y: float = 0.0
         self.tempo_passo: float = 0.0
         self.olhando_esquerda: bool = False
+        self.andando: bool = False
+        self.correndo: bool = False
         self.modo_alto_contraste: bool = modo_alto_contraste
         self.fonte_grande: bool = fonte_grande
 
@@ -130,8 +122,14 @@ class Jogador(pygame.sprite.Sprite):
 
         self.rect.topleft = (round(self.pos_x), round(self.pos_y))
 
+    def _limites_y(self) -> tuple[float, float]:
+        """Retorna os limites verticais da calçada (entre o canteiro superior e a rua)."""
+        y_min = float(HUD_ALTURA + TILE)
+        y_max = float(ALTURA - 2 * TILE)
+        return y_min, y_max
+
     def _obter_hitbox(self, pos_x: float, pos_y: float) -> pygame.Rect:
-        """Retorna a hitbox reduzida (26x26) centralizada dentro do sprite 48x48."""
+        """Retorna a hitbox reduzida (24x24) centralizada dentro do sprite 48x48."""
         margem = HITBOX_JOGADOR_MARGEM
         return pygame.Rect(
             round(pos_x) + margem,
@@ -152,91 +150,74 @@ class Jogador(pygame.sprite.Sprite):
         return len(colisoes) > 0
 
     def _mover_com_deslizamento_quina(self, dx: float, dy: float) -> None:
-        """Move Alex nos eixos X e Y com deslizamento automático em quinas.
+        """Move Alex nos eixos X e Y com deslizamento rápido em quinas."""
+        y_min, y_max = self._limites_y()
 
-        Quando o jogador esbarra apenas na borda de um poste (até CORNER_NUDGE_MAX),
-        ajusta suavemente o eixo perpendicular para que o personagem escorregue
-        pelo corredor sem travar.
-
-        Args:
-            dx: Deslocamento desejado em pixels no eixo X.
-            dy: Deslocamento desejado em pixels no eixo Y.
-        """
-        # Eixo X
         if dx != 0.0:
             alvo_x = max(0.0, min(float(LARGURA - TILE), self.pos_x + dx))
             if not self._colide_com_solidos(alvo_x, self.pos_y):
                 self.pos_x = alvo_x
-            else:
-                # Tenta deslizar suavemente para cima ou para baixo ao redor da quina
-                for ajuste in range(2, CORNER_NUDGE_MAX + 1, 2):
-                    y_cima = max(float(HUD_ALTURA), self.pos_y - ajuste)
+            elif dy == 0.0:
+                for ajuste in (4, 8, 12, CORNER_NUDGE_MAX):
+                    y_cima = max(y_min, self.pos_y - ajuste)
                     if not self._colide_com_solidos(alvo_x, y_cima):
-                        self.pos_y = max(float(HUD_ALTURA), self.pos_y - abs(dx) * 0.75)
+                        self.pos_y = max(y_min, self.pos_y - abs(dx))
                         break
-                    y_baixo = min(float(ALTURA - TILE), self.pos_y + ajuste)
+                    y_baixo = min(y_max, self.pos_y + ajuste)
                     if not self._colide_com_solidos(alvo_x, y_baixo):
-                        self.pos_y = min(float(ALTURA - TILE), self.pos_y + abs(dx) * 0.75)
+                        self.pos_y = min(y_max, self.pos_y + abs(dx))
                         break
 
-        # Eixo Y
         if dy != 0.0:
-            alvo_y = max(float(HUD_ALTURA), min(float(ALTURA - TILE), self.pos_y + dy))
+            alvo_y = max(y_min, min(y_max, self.pos_y + dy))
             if not self._colide_com_solidos(self.pos_x, alvo_y):
                 self.pos_y = alvo_y
-            else:
-                for ajuste in range(2, CORNER_NUDGE_MAX + 1, 2):
+            elif dx == 0.0:
+                for ajuste in (4, 8, 12, CORNER_NUDGE_MAX):
                     x_esq = max(0.0, self.pos_x - ajuste)
                     if not self._colide_com_solidos(x_esq, alvo_y):
-                        self.pos_x = max(0.0, self.pos_x - abs(dy) * 0.75)
+                        self.pos_x = max(0.0, self.pos_x - abs(dy))
                         break
                     x_dir = min(float(LARGURA - TILE), self.pos_x + ajuste)
                     if not self._colide_com_solidos(x_dir, alvo_y):
-                        self.pos_x = min(float(LARGURA - TILE), self.pos_x + abs(dy) * 0.75)
+                        self.pos_x = min(float(LARGURA - TILE), self.pos_x + abs(dy))
                         break
 
     def update(self, dt: float) -> None:
-        """Atualiza Alex com movimento suave, corner-nudging e animação de passo.
-
-        Args:
-            dt: Tempo decorrido em segundos desde o último frame.
-        """
+        """Atualiza Alex com resposta imediata em 8 direções e corrida via SHIFT."""
         if not self.movimento_habilitado:
-            self.vel_x = 0.0
-            self.vel_y = 0.0
+            self.andando = False
+            self.correndo = False
             self.rect.topleft = (round(self.pos_x), round(self.pos_y))
             return
 
         teclas = pygame.key.get_pressed()
-        direcao = pygame.math.Vector2(
-            float((teclas[pygame.K_d] or teclas[pygame.K_RIGHT]) - (teclas[pygame.K_a] or teclas[pygame.K_LEFT])),
-            float((teclas[pygame.K_s] or teclas[pygame.K_DOWN]) - (teclas[pygame.K_w] or teclas[pygame.K_UP])),
+        dir_x = float(
+            (teclas[pygame.K_d] or teclas[pygame.K_RIGHT])
+            - (teclas[pygame.K_a] or teclas[pygame.K_LEFT])
+        )
+        dir_y = float(
+            (teclas[pygame.K_s] or teclas[pygame.K_DOWN])
+            - (teclas[pygame.K_w] or teclas[pygame.K_UP])
         )
 
-        if direcao.length_squared() > 0.0:
-            direcao = direcao.normalize()
-            if direcao.x < -0.1:
+        self.andando = dir_x != 0.0 or dir_y != 0.0
+        sprint_ativo = bool(teclas[pygame.K_LSHIFT] or teclas[pygame.K_RSHIFT])
+        self.correndo = self.andando and sprint_ativo
+
+        if self.andando:
+            if dir_x != 0.0 and dir_y != 0.0:
+                fator = 0.70710678
+                dir_x *= fator
+                dir_y *= fator
+            if dir_x < 0.0:
                 self.olhando_esquerda = True
-            elif direcao.x > 0.1:
+            elif dir_x > 0.0:
                 self.olhando_esquerda = False
 
-        alvo_vx = direcao.x * VELOCIDADE_JOGADOR
-        alvo_vy = direcao.y * VELOCIDADE_JOGADOR
-        fator = min(1.0, ACELERACAO_JOGADOR * dt)
-        self.vel_x += (alvo_vx - self.vel_x) * fator
-        self.vel_y += (alvo_vy - self.vel_y) * fator
-
-        if abs(self.vel_x) < 2.0:
-            self.vel_x = 0.0
-        if abs(self.vel_y) < 2.0:
-            self.vel_y = 0.0
-
-        self._mover_com_deslizamento_quina(self.vel_x * dt, self.vel_y * dt)
-
-        # Animação leve de balanço vertical enquanto anda (sem causar desconforto)
-        andando = (self.vel_x * self.vel_x + self.vel_y * self.vel_y) > 100.0
-        if andando:
-            self.tempo_passo += dt * 11.0
+            vel = VELOCIDADE_SPRINT if self.correndo else VELOCIDADE_JOGADOR
+            self._mover_com_deslizamento_quina(dir_x * vel * dt, dir_y * vel * dt)
+            self.tempo_passo += dt * (15.0 if self.correndo else 11.0)
             deslocamento_bob = round(math.sin(self.tempo_passo) * 2.0)
         else:
             self.tempo_passo = 0.0
@@ -273,7 +254,7 @@ class Jogador(pygame.sprite.Sprite):
         """Posiciona Alex imediatamente na célula (coluna, linha) da grade."""
         self.pos_x = float(coluna * TILE)
         self.pos_y = float(HUD_ALTURA + linha * TILE)
-        self.vel_x = 0.0
-        self.vel_y = 0.0
         self.tempo_passo = 0.0
+        self.andando = False
+        self.correndo = False
         self.rect.topleft = (round(self.pos_x), round(self.pos_y))
