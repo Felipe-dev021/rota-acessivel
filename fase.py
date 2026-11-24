@@ -382,6 +382,23 @@ class GerenciadorFases:
             return True
         return False
 
+    def obter_lista_fases(self) -> List[Dict[str, object]]:
+        """Retorna resumo das fases da campanha para seleção no Mapa Urbano.
+
+        Returns:
+            Lista de dicionários com numero, nome, perfil_morador, tempo e recursos.
+        """
+        return [
+            {
+                "numero": int(fase["numero"]),
+                "nome": str(fase["nome"]),
+                "perfil_morador": str(fase["perfil_morador"]),
+                "tempo": float(fase["tempo"]),
+                "recursos": int(fase["recursos"]),
+            }
+            for fase in self.FASES_CAMPANHA
+        ]
+
     def obter_grade_barreiras(self) -> Dict[Celula, Barreira]:
         """Constrói o dicionário {(col, lin): Barreira} para o algoritmo BFS.
 

@@ -39,6 +39,7 @@ from hud import HUD
 from morador import Morador
 from particulas import SistemaParticulas
 from player import Jogador
+from save_manager import GerenciadorSave
 
 
 class JogoRotaAcessivel:
@@ -53,29 +54,34 @@ class JogoRotaAcessivel:
 
         self.executando: bool = True
         self.estado: str = ESTADO_MENU
-        self.modo_alto_contraste: bool = False
-        self.fonte_grande: bool = False
-        self.audio_ativo: bool = True
-        self.musica_ativa: bool = True
+        self.save: GerenciadorSave = GerenciadorSave()
+        prefs = self.save.obter_preferencias()
+        self.modo_alto_contraste: bool = prefs["alto_contraste"]
+        self.fonte_grande: bool = prefs["fonte_grande"]
+        self.audio_ativo: bool = prefs["som_ativo"]
+        self.musica_ativa: bool = prefs["musica_ativa"]
         self.vitoria_campanha: bool = False
 
         self.sons: Dict[str, Optional[pygame.mixer.Sound]] = self._carregar_sons()
         self._iniciar_musica_fundo()
         self.hud: HUD = HUD()
+        self.hud.atualizar_fontes(self.fonte_grande)
         self.particulas: SistemaParticulas = SistemaParticulas()
         self.fases: GerenciadorFases = GerenciadorFases()
-        self.fases.carregar_fase(0, self.modo_alto_contraste)
+        self.fases.carregar_fase(0, self.modo_alto_contraste, self.fonte_grande)
 
         self.jogador: Jogador = Jogador(
             self.fases.inicio_jogador[0],
             self.fases.inicio_jogador[1],
             self.fases.grupo_solidos,
             self.modo_alto_contraste,
+            self.fonte_grande,
         )
         self.morador: Morador = Morador(
             self.fases.inicio_morador[0],
             self.fases.inicio_morador[1],
             self.modo_alto_contraste,
+            self.fonte_grande,
         )
 
         # Único grupo que executa update(dt) e draw(tela) a cada frame
@@ -163,6 +169,15 @@ class JogoRotaAcessivel:
         self.particulas.limpar()
         self.hud.limpar_feedback()
 
+    def _salvar_preferencias(self) -> None:
+        """Persiste as preferências atuais de acessibilidade em progresso.json."""
+        self.save.atualizar_preferencias(
+            self.modo_alto_contraste,
+            self.fonte_grande,
+            self.audio_ativo,
+            self.musica_ativa,
+        )
+
     def _alternar_contraste(self) -> None:
         """Alterna o Modo Alto Contraste em tempo real em qualquer tela."""
         self.modo_alto_contraste = not self.modo_alto_contraste
@@ -171,6 +186,7 @@ class JogoRotaAcessivel:
         )
         self.jogador.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
         self.morador.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
+        self._salvar_preferencias()
         self._tocar_som("clique")
 
     def _alternar_fonte(self) -> None:
@@ -182,12 +198,14 @@ class JogoRotaAcessivel:
         )
         self.jogador.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
         self.morador.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
+        self._salvar_preferencias()
         self._tocar_som("clique")
 
     def _alternar_audio(self) -> None:
         """Ativa ou silencia todos os efeitos sonoros e a trilha de fundo."""
         self.audio_ativo = not self.audio_ativo
         self._atualizar_volume_musica()
+        self._salvar_preferencias()
         if self.audio_ativo:
             self._tocar_som("clique")
 
@@ -195,6 +213,7 @@ class JogoRotaAcessivel:
         """Ativa ou silencia exclusivamente a trilha sonora de fundo."""
         self.musica_ativa = not self.musica_ativa
         self._atualizar_volume_musica()
+        self._salvar_preferencias()
         self._tocar_som("clique")
 
     def _iniciar_nova_campanha(self) -> None:
@@ -233,7 +252,7 @@ class JogoRotaAcessivel:
         if barreira.custo > self.fases.recursos:
             self._tocar_som("erro")
             self.hud.definir_feedback(
-                "Recursos insuficientes! Pressione [R] para reiniciar a fase e replanejar.",
+                "Sem recursos suficientes! Pressione [R] para reiniciar a fase e replanejar.",
                 "ERRO",
                 DURACAO_FEEDBACK,
             )
@@ -253,6 +272,20 @@ class JogoRotaAcessivel:
                 centro_barreira[0], centro_barreira[1], cor_particula[:3]
             )
             self._tocar_som("acao")
+
+            # Caso de borda: alertar se o orçamento zerou com a rota ainda bloqueada
+            if self.fases.recursos == 0:
+                sucesso_previa, _, _ = self.morador.calcular_rota(
+                    self.fases.obter_grade_barreiras(),
+                    self.fases.inicio_morador,
+                    self.fases.destino,
+                )
+                if not sucesso_previa:
+                    mensagem = (
+                        f"{mensagem} Orçamento zerado — se ainda houver bloqueio "
+                        "pago, pressione [R] para reiniciar a fase."
+                    )
+
             self.hud.definir_feedback(mensagem, "OK", DURACAO_FEEDBACK)
 
     def _iniciar_validacao_rota(self) -> None:
@@ -425,6 +458,13 @@ class JogoRotaAcessivel:
             )
             self._tocar_som("vitoria")
             self.ultimo_resumo_fase = self.fases.registrar_metricas_fase(concluida=True)
+            self.save.registrar_conclusao_fase(
+                int(self.ultimo_resumo_fase["numero"]),
+                self.fases.total_fases,
+                str(self.ultimo_resumo_fase["nivel_autonomia"]),
+                int(self.ultimo_resumo_fase["selos"]),
+                int(self.ultimo_resumo_fase["erros_rota"]),
+            )
             if self.fases.indice_atual + 1 < self.fases.total_fases:
                 self.estado = ESTADO_TRANSICAO
             else:
@@ -445,8 +485,13 @@ class JogoRotaAcessivel:
                 if barreira is not None and barreira.mensagem_erro
                 else "Rota bloqueada! Remova obstáculos ou desvie de postes fixos."
             )
+            dica_reinicio = (
+                " Sem recursos: pressione [R] para reiniciar a fase."
+                if self.fases.recursos == 0
+                else ""
+            )
             self.hud.definir_feedback(
-                f"{explicacao} (-{int(PENALIDADE_ERRO)}s)",
+                f"{explicacao} (-{int(PENALIDADE_ERRO)}s){dica_reinicio}",
                 "ERRO",
                 DURACAO_FEEDBACK,
             )
