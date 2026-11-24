@@ -6,6 +6,7 @@ baixa visão/bengala branca), garantindo coerência visual e educativa com as
 barreiras de cada cenário, além da Busca em Largura (BFS) em 4 direções.
 """
 
+import math
 from collections import deque
 from typing import Dict, List, Optional, Tuple
 
@@ -77,8 +78,8 @@ class Morador(pygame.sprite.Sprite):
         self._carregar_todos_sprites()
 
         self.image: pygame.Surface = self._sprites_cache[PERFIL_CADEIRANTE]
-        self.rect: pygame.Rect = self.image.get_rect(
-            topleft=(round(self.pos_x), round(self.pos_y))
+        self.rect: pygame.Rect = pygame.Rect(
+            round(self.pos_x), round(self.pos_y), TILE, TILE
         )
 
         self.caminho: List[Celula] = []
@@ -88,17 +89,20 @@ class Morador(pygame.sprite.Sprite):
         self.rota_sucesso: bool = False
         self.barreira_bloqueadora: Optional[Barreira] = None
         self.resultado_pendente: Optional[str] = None
+        self.tempo_passo: float = 0.0
+        self.bob_atual: float = 0.0
 
         self.atualizar_visual(modo_alto_contraste, fonte_grande)
 
     def _carregar_todos_sprites(self) -> None:
-        """Carrega em cache os 3 sprites de moradores via caminho_arquivo()."""
+        """Carrega em cache os 3 sprites 2.5D de moradores via caminho_arquivo()."""
         for chave_perfil, nome_arquivo in self._SPRITES_POR_PERFIL.items():
             superficie = pygame.image.load(caminho_arquivo(nome_arquivo))
             if pygame.display.get_surface() is not None:
                 superficie = superficie.convert_alpha()
-            if superficie.get_size() != (TILE, TILE):
-                superficie = pygame.transform.smoothscale(superficie, (TILE, TILE))
+            if superficie.get_width() != TILE:
+                nova_altura = max(TILE, round(superficie.get_height() * (TILE / superficie.get_width())))
+                superficie = pygame.transform.smoothscale(superficie, (TILE, nova_altura))
             self._sprites_cache[chave_perfil] = superficie
 
     def definir_perfil(self, perfil: str) -> None:
@@ -112,9 +116,16 @@ class Morador(pygame.sprite.Sprite):
             self.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
 
     def obter_retrato(self, tamanho: int = 40) -> pygame.Surface:
-        """Retorna uma miniatura do sprite do Morador atual para uso no HUD."""
+        """Retorna uma miniatura quadrada centralizada do Morador para o HUD."""
         base = self._sprites_cache.get(self.perfil, self._sprites_cache[PERFIL_CADEIRANTE])
-        return pygame.transform.smoothscale(base, (tamanho, tamanho))
+        larg, alt = base.get_size()
+        escala = tamanho / max(larg, alt)
+        redim = pygame.transform.smoothscale(
+            base, (max(1, round(larg * escala)), max(1, round(alt * escala)))
+        )
+        quad = pygame.Surface((tamanho, tamanho), pygame.SRCALPHA)
+        quad.blit(redim, redim.get_rect(center=(tamanho // 2, tamanho // 2)))
+        return quad
 
     def atualizar_visual(
         self,
@@ -314,8 +325,10 @@ class Morador(pygame.sprite.Sprite):
         self.rect.topleft = (round(self.pos_x), round(self.pos_y))
 
     def update(self, dt: float) -> None:
-        """Move o Morador suavemente tile a tile usando VELOCIDADE_MORADOR * dt."""
+        """Move o Morador suavemente tile a tile com balanço leve ao deslizar."""
         if not self.em_movimento:
+            self.bob_atual += (0.0 - self.bob_atual) * min(1.0, 14.0 * dt)
+            self.rect.topleft = (round(self.pos_x), round(self.pos_y + self.bob_atual))
             return
 
         if self.indice_passo >= len(self.caminho):
@@ -341,7 +354,10 @@ class Morador(pygame.sprite.Sprite):
             self.pos_x += (dx / distancia) * passo
             self.pos_y += (dy / distancia) * passo
 
-        self.rect.topleft = (round(self.pos_x), round(self.pos_y))
+        self.tempo_passo += dt * 10.0
+        bob_alvo = math.sin(self.tempo_passo) * 1.8
+        self.bob_atual += (bob_alvo - self.bob_atual) * min(1.0, 16.0 * dt)
+        self.rect.topleft = (round(self.pos_x), round(self.pos_y + self.bob_atual))
 
         if self.indice_passo >= len(self.caminho):
             self.em_movimento = False

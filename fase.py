@@ -48,11 +48,6 @@ Celula = Tuple[int, int]
 class GerenciadorFases:
     """Controla as 4 fases de Maricá/RJ, grupos de colisão e avaliação qualitativa."""
 
-    # Legenda dos mapas 20x11 (linhas 0 e 10 são faixas cênicas: lagoa/jardim e rua/Vermelhinho):
-    # '.' = calçada livre   | 'I' = início do Morador | 'J' = início de Alex
-    # 'F' = destino         | 'P' = canteiro/poste    | 'L' = lixeira (0 rec)
-    # 'D' = degrau (1 rec)  | 'B' = buraco (1 rec)    | 'T' = sem piso tátil (1)
-    # 'S' = aviso sonoro (1)
     FASES_CAMPANHA: List[Dict[str, object]] = [
         {
             "numero": 1,
