@@ -104,12 +104,12 @@ class Barreira(pygame.sprite.Sprite):
             "sigla": "B",
             "rotulo_acao": "Nivelar Piso",
             "mensagem_sucesso": (
-                "Pavimento nivelado e regularizado! O risco de travamento de "
-                "rodas dianteiras foi eliminado (custo: 1 rec)."
+                "Pavimento nivelado e regularizado! Agora a circulação é "
+                "segura para cadeiras de rodas e bengalas (custo: 1 rec)."
             ),
             "mensagem_erro": (
-                "Buraco no pavimento! Pisos danificados travam as rodas "
-                "dianteiras da cadeira de rodas e causam risco de tombamento."
+                "Buraco no pavimento! Pisos danificados travam rodas e "
+                "oferecem alto risco de queda para quem usa bengala."
             ),
         },
         TIPO_SEM_PISO_TATIL: {
