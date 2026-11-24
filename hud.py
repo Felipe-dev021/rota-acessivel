@@ -21,6 +21,7 @@ from config import (
     COLS,
     CORES_ALTO_CONTRASTE,
     CORES_NORMAL,
+    DURACAO_POPUP,
     FONTE_FAMILIA,
     FONTES_GRANDE,
     FONTES_NORMAL,
@@ -62,6 +63,11 @@ class HUD:
 
         self._cache_fundos: Dict[Tuple[int, bool], pygame.Surface] = {}
         self._cache_overlay: Dict[bool, pygame.Surface] = {}
+        self._cache_feedback_chave: Optional[Tuple[str, str, bool, bool]] = None
+        self._cache_feedback_surf: Optional[pygame.Surface] = None
+        self._cache_atalhos_chave: Optional[Tuple[bool, bool, bool, bool, bool]] = None
+        self._cache_atalhos_surf: Optional[pygame.Surface] = None
+        self._popups: List[Dict[str, object]] = []
         self._miniaturas_legenda: Dict[str, pygame.Surface] = {}
         self._carregar_miniaturas_legenda()
 
@@ -122,17 +128,63 @@ class HUD:
         self.tempo_feedback = duracao
 
     def limpar_feedback(self) -> None:
-        """Remove imediatamente qualquer mensagem de feedback ativa."""
+        """Remove imediatamente qualquer mensagem de feedback ou popup ativo."""
         self.mensagem_feedback = ""
         self.tempo_feedback = 0.0
+        self._cache_feedback_chave = None
+        self._cache_feedback_surf = None
+        self._popups.clear()
+
+    def adicionar_popup(
+        self,
+        centro_x: float,
+        centro_y: float,
+        texto: str,
+        cor_fundo: Tuple[int, ...],
+        cor_texto: Tuple[int, ...],
+    ) -> None:
+        """Cria um texto flutuante pré-renderizado que sobe suavemente após uma ação."""
+        render = self.fonte_pequena.render(texto, True, cor_texto)
+        largura = render.get_width() + 14
+        altura = render.get_height() + 8
+        surf = pygame.Surface((largura, altura), pygame.SRCALPHA)
+        pygame.draw.rect(surf, cor_fundo[:3], (0, 0, largura, altura), border_radius=6)
+        pygame.draw.rect(surf, cor_texto[:3], (0, 0, largura, altura), 2, border_radius=6)
+        surf.blit(render, (7, 4))
+        self._popups.append(
+            {
+                "surf": surf,
+                "x": centro_x - largura / 2.0,
+                "y": centro_y - altura,
+                "vida": DURACAO_POPUP,
+            }
+        )
 
     def atualizar(self, dt: float) -> None:
-        """Atualiza o temporizador do feedback inferior e o relógio de animações."""
+        """Atualiza feedback, popups flutuantes e relógio de animações."""
         self.tempo_animacao += dt
         if self.tempo_feedback > 0.0:
             self.tempo_feedback = max(0.0, self.tempo_feedback - dt)
             if self.tempo_feedback == 0.0:
                 self.mensagem_feedback = ""
+                self._cache_feedback_chave = None
+                self._cache_feedback_surf = None
+
+        vivos: List[Dict[str, object]] = []
+        for popup in self._popups:
+            vida = float(popup["vida"]) - dt
+            if vida > 0.0:
+                popup["vida"] = vida
+                popup["y"] = float(popup["y"]) - 36.0 * dt
+                vivos.append(popup)
+        self._popups = vivos
+
+    def desenhar_popups(self, tela: pygame.Surface) -> None:
+        """Desenha todos os popups flutuantes pré-renderizados na tela."""
+        for popup in self._popups:
+            surf = popup["surf"]
+            if isinstance(surf, pygame.Surface):
+                tela.blit(surf, (round(float(popup["x"])), round(float(popup["y"]))))
 
     def obter_acao_clique(self, pos_mouse: Tuple[int, int]) -> Optional[str]:
         """Retorna a chave do botão clicado na tela atual ou None."""
@@ -213,22 +265,46 @@ class HUD:
         render = self.fonte_media.render(texto, True, cor_texto)
         tela.blit(render, render.get_rect(center=ret.center))
 
+    def _desenhar_vermelhinho(
+        self,
+        surf: pygame.Surface,
+        x: int,
+        y: int,
+        cores: Dict[str, Tuple[int, ...]],
+    ) -> None:
+        """Desenha o icônico ônibus Vermelhinho (Tarifa Zero) de Maricá/RJ."""
+        pygame.draw.rect(surf, cores["vermelhinho"], (x, y, 86, 32), border_radius=6)
+        pygame.draw.rect(surf, (250, 248, 244), (x + 2, y + 20, 82, 4))
+        # Janelas do ônibus
+        for jx in (x + 8, x + 26, x + 44, x + 64):
+            larg = 14 if jx < x + 60 else 16
+            pygame.draw.rect(surf, (186, 230, 253), (jx, y + 5, larg, 11), border_radius=2)
+        # Rodas e farol
+        pygame.draw.circle(surf, (26, 30, 38), (x + 18, y + 32), 6)
+        pygame.draw.circle(surf, (26, 30, 38), (x + 68, y + 32), 6)
+        pygame.draw.circle(surf, (254, 240, 138), (x + 84, y + 24), 3)
+        pygame.draw.rect(surf, cores["tile_borda"], (x, y, 86, 32), 2, border_radius=6)
+
     def _criar_fundo_fase(
         self,
         numero_fase: int,
         modo_alto_contraste: bool,
     ) -> pygame.Surface:
-        """Pré-renderiza o cenário cartoon 2D da fase em uma única superfície em cache."""
+        """Pré-renderiza o cenário cartoon de Maricá/RJ da fase em cache (1 blit/frame)."""
         altura_mapa = ROWS * TILE
         surf = pygame.Surface((LARGURA, altura_mapa))
         cores = self.paleta(modo_alto_contraste)
 
-        # 1. Calçada central (linhas 1 a 9) com lajotas acolhedoras
+        # 1. Calçada central (linhas 1 a 9) + faixas cênicas (linha 0 e linha 10)
         for lin in range(ROWS):
             for col in range(COLS):
                 ret = pygame.Rect(col * TILE, lin * TILE, TILE, TILE)
                 if lin == 0:
-                    cor = cores["faixa_servico"]
+                    cor = (
+                        cores["lagoa_azul"]
+                        if numero_fase in (1, 4)
+                        else cores["faixa_servico"]
+                    )
                 elif lin == ROWS - 1:
                     cor = cores["asfalto"]
                 else:
@@ -241,12 +317,18 @@ class HUD:
                 if 1 <= lin <= ROWS - 2:
                     pygame.draw.rect(surf, cores["grade_linha"], ret, 1)
 
-        # 2. Meio-fio superior e inferior
+        # 2. Ciclovia vermelha de Maricá (filete charmoso na borda superior da calçada)
+        if not modo_alto_contraste and numero_fase in (1, 4):
+            pygame.draw.rect(surf, cores["ciclovia_vermelha"], (0, TILE, LARGURA, 10))
+            for x_traco in range(12, LARGURA, 40):
+                pygame.draw.rect(surf, (250, 246, 238), (x_traco, TILE + 4, 18, 2))
+
+        # 3. Meio-fio superior e inferior
         pygame.draw.rect(surf, cores["meio_fio"], (0, TILE - 6, LARGURA, 6))
         pygame.draw.rect(surf, cores["meio_fio"], (0, (ROWS - 1) * TILE, LARGURA, 7))
 
-        # 3. Faixas de pedestres / sinalização na rua (borda inferior)
-        for x_faixa in range(28, LARGURA - 40, 72):
+        # 4. Faixas de pedestres e rua (linha 10)
+        for x_faixa in range(24, LARGURA - 120, 72):
             pygame.draw.rect(
                 surf,
                 cores["faixa_rua"],
@@ -254,14 +336,48 @@ class HUD:
                 border_radius=3,
             )
 
-        # 4. Decoração temática leve no canteiro superior (sem atrapalhar leitura)
+        # 5. Elementos icônicos de Maricá/RJ em cada fase
         if not modo_alto_contraste:
-            cor_acento = cores.get(f"fase_{numero_fase}_acento", cores["fase_1_acento"])
-            for x_dec in range(24, LARGURA - 24, 96):
-                # Copas de árvores cartoon ou canteiros temáticos
-                pygame.draw.circle(surf, (82, 138, 72), (x_dec + 16, 22), 15)
-                pygame.draw.circle(surf, (108, 168, 92), (x_dec + 12, 18), 10)
-                pygame.draw.circle(surf, cor_acento, (x_dec + 56, 22), 6)
+            if numero_fase == 1:
+                # Orla de Araçatiba: brilho na lagoa + coqueiros + Vermelhinho no ponto!
+                for x_onda in range(18, LARGURA - 30, 84):
+                    pygame.draw.arc(
+                        surf, cores["lagoa_brilho"], (x_onda, 14, 44, 14), 0, math.pi, 2
+                    )
+                for x_coq in (80, 270, 480, 690, 860):
+                    pygame.draw.circle(surf, (56, 134, 62), (x_coq, 24), 16)
+                    pygame.draw.circle(surf, (88, 168, 82), (x_coq - 5, 19), 10)
+                self._desenhar_vermelhinho(surf, LARGURA - 108, (ROWS - 1) * TILE + 8, cores)
+
+            elif numero_fase == 2:
+                # Escola Municipal do Centro: fachada alegre + árvores
+                pygame.draw.rect(surf, (236, 214, 180), (620, 4, 320, 38), border_radius=6)
+                pygame.draw.rect(surf, (206, 98, 48), (620, 4, 320, 12), border_radius=4)
+                for jx in range(640, 920, 44):
+                    pygame.draw.rect(surf, (186, 230, 253), (jx, 20, 24, 16), border_radius=2)
+                for x_arv in (60, 190, 330, 490):
+                    pygame.draw.circle(surf, (66, 136, 68), (x_arv, 22), 16)
+                    pygame.draw.circle(surf, (104, 172, 92), (x_arv - 4, 18), 10)
+
+            elif numero_fase == 3:
+                # Praça Orlando de Barros Pimentel: Ipês amarelos + Coreto central!
+                pygame.draw.circle(surf, (236, 226, 208), (480, 22), 20)
+                pygame.draw.circle(surf, (196, 64, 56), (480, 22), 14)
+                pygame.draw.circle(surf, (248, 222, 168), (480, 22), 6)
+                for x_ipe in (70, 210, 340, 620, 760, 890):
+                    pygame.draw.circle(surf, (234, 179, 8), (x_ipe, 22), 15)
+                    pygame.draw.circle(surf, (254, 240, 138), (x_ipe - 4, 18), 9)
+
+            elif numero_fase == 4:
+                # Posto de Saúde — Itaipuaçu: orla + fachada branca com cruz vermelha + Vermelhinho
+                for x_onda in range(20, 620, 84):
+                    pygame.draw.arc(
+                        surf, cores["lagoa_brilho"], (x_onda, 14, 44, 14), 0, math.pi, 2
+                    )
+                pygame.draw.rect(surf, (248, 250, 252), (660, 4, 280, 38), border_radius=6)
+                pygame.draw.rect(surf, (214, 48, 48), (788, 10, 24, 8))
+                pygame.draw.rect(surf, (214, 48, 48), (796, 6, 8, 24))
+                self._desenhar_vermelhinho(surf, 36, (ROWS - 1) * TILE + 8, cores)
 
         if pygame.display.get_surface() is not None:
             surf = surf.convert()
@@ -340,6 +456,28 @@ class HUD:
                 py = round(y1 + (y2 - y1) * t)
                 pygame.draw.circle(tela, cor_rastro, (px, py), 5)
                 pygame.draw.circle(tela, cores["tile_borda"], (px, py), 5, 1)
+
+    def desenhar_visao_barreiras(
+        self,
+        tela: pygame.Surface,
+        grupo_interativos: pygame.sprite.Group,
+        barreira_erro: Optional[Barreira],
+        modo_raio_x: bool,
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Destaca barreiras pendentes no modo Raio-X [TAB] e o último bloqueio em vermelho."""
+        cores = self.paleta(modo_alto_contraste)
+        pulso = round(2 + 3 * (0.5 + 0.5 * math.sin(self.tempo_animacao * 6.0)))
+
+        if modo_raio_x:
+            for sprite in grupo_interativos:
+                if isinstance(sprite, Barreira) and sprite.alteravel:
+                    ret = sprite.rect.inflate(pulso, pulso)
+                    pygame.draw.rect(tela, cores["rota_preview"], ret, 3, border_radius=8)
+
+        if barreira_erro is not None and barreira_erro.alive() and barreira_erro.bloqueia_morador:
+            ret_erro = barreira_erro.rect.inflate(pulso + 2, pulso + 2)
+            pygame.draw.rect(tela, cores["erro_borda"], ret_erro, 4, border_radius=8)
 
     def desenhar_destaque_interacao(
         self,
@@ -465,17 +603,28 @@ class HUD:
         txt_btn = self.fonte_pequena.render(rotulo_btn, True, cores["destaque_e_texto"])
         tela.blit(txt_btn, txt_btn.get_rect(center=self.botao_testar_hud.center))
 
-        # Linha inferior de atalhos rápidos + indicadores de acessibilidade
-        contraste_txt = "ALTO" if modo_alto_contraste else "NORM"
-        fonte_txt = "G" if self.fonte_grande else "N"
-        som_txt = "ON" if audio_ativo else "OFF"
-        mus_txt = "ON" if (audio_ativo and musica_ativa) else "OFF"
-        atalhos = (
-            f"[WASD/Setas] Mover   [E/Clique] Intervir   [R] Reiniciar   [P] Pausa   |   "
-            f"[C] Contr:{contraste_txt}  [F] Fonte:{fonte_txt}  [M] Som:{som_txt}  [N] Mus:{mus_txt}"
+        # Linha inferior de atalhos rápidos em cache (evita renderizar texto toda frame)
+        chave_at = (
+            modo_alto_contraste,
+            self.fonte_grande,
+            audio_ativo,
+            musica_ativa,
+            False,
         )
-        txt_at = self.fonte_pequena.render(atalhos, True, cores["texto_secundario"])
-        tela.blit(txt_at, (14, 67))
+        if self._cache_atalhos_chave != chave_at or self._cache_atalhos_surf is None:
+            contraste_txt = "ALTO" if modo_alto_contraste else "NORM"
+            fonte_txt = "G" if self.fonte_grande else "N"
+            som_txt = "ON" if audio_ativo else "OFF"
+            mus_txt = "ON" if (audio_ativo and musica_ativa) else "OFF"
+            atalhos = (
+                f"[WASD] Mover  [SHIFT] Correr  [E/Clique] Obra  [TAB] Raio-X  [R] Reiniciar  |  "
+                f"[C]{contraste_txt} [F]{fonte_txt} [M]{som_txt} [N]{mus_txt}"
+            )
+            self._cache_atalhos_surf = self.fonte_pequena.render(
+                atalhos, True, cores["texto_secundario"]
+            )
+            self._cache_atalhos_chave = chave_at
+        tela.blit(self._cache_atalhos_surf, (14, 67))
 
     def desenhar_feedback_inferior(
         self,
@@ -483,7 +632,7 @@ class HUD:
         retrato_morador: pygame.Surface,
         modo_alto_contraste: bool,
     ) -> None:
-        """Desenha a caixa educativa inferior temporária com retrato do Morador."""
+        """Desenha a caixa educativa inferior usando texto pré-renderizado em cache."""
         if not self.mensagem_feedback or self.tempo_feedback <= 0.0:
             return
 
@@ -498,16 +647,25 @@ class HUD:
         pygame.draw.rect(tela, cor_borda, ret, 3, border_radius=10)
 
         tela.blit(retrato_morador, (ret.x + 12, ret.y + (ret.height - 40) // 2))
-        self._desenhar_texto_quebrado(
-            tela,
-            prefixo + self.mensagem_feedback,
-            self.fonte_normal,
-            cores["texto_principal"],
-            ret.x + 62,
-            ret.y + 10,
-            ret.width - 78,
-            espacamento=2,
-        )
+
+        chave = (self.mensagem_feedback, self.tipo_feedback, modo_alto_contraste, self.fonte_grande)
+        if self._cache_feedback_chave != chave or self._cache_feedback_surf is None:
+            larg_txt = ret.width - 78
+            surf_txt = pygame.Surface((larg_txt, ret.height - 14), pygame.SRCALPHA)
+            self._desenhar_texto_quebrado(
+                surf_txt,
+                prefixo + self.mensagem_feedback,
+                self.fonte_normal,
+                cores["texto_principal"],
+                0,
+                0,
+                larg_txt,
+                espacamento=2,
+            )
+            self._cache_feedback_surf = surf_txt
+            self._cache_feedback_chave = chave
+
+        tela.blit(self._cache_feedback_surf, (ret.x + 62, ret.y + 10))
 
     def desenhar_menu(
         self,
@@ -540,10 +698,10 @@ class HUD:
             border_top_left_radius=16,
             border_top_right_radius=16,
         )
-        titulo = self.fonte_titulo.render("ROTA ACESSÍVEL", True, cores["destaque_e"])
+        titulo = self.fonte_titulo.render("ROTA ACESSÍVEL — MARICÁ/RJ", True, cores["destaque_e"])
         tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, painel.y + 44)))
         sub = self.fonte_media.render(
-            "Vila Nova — Serious Game sobre Acessibilidade e Inclusão (ABNT NBR 9050)",
+            "Orla de Araçatiba · Centro · Praça Orlando · Itaipuaçu (ABNT NBR 9050)",
             True,
             cores["texto_principal"],
         )
@@ -914,7 +1072,7 @@ class HUD:
         pygame.draw.rect(tela, cor_borda, painel, 4, border_radius=16)
 
         titulo_texto = (
-            "VILA NOVA MAIS ACESSÍVEL — CAMPANHA CONCLUÍDA!"
+            "MARICÁ MAIS ACESSÍVEL — CAMPANHA CONCLUÍDA!"
             if vitoria
             else "TEMPO ESGOTADO — ROTA AINDA BLOQUEADA"
         )
@@ -1023,7 +1181,7 @@ class HUD:
         )
 
         titulo = self.fonte_subtitulo.render(
-            "MAPA DE VILA NOVA — SELECIONE UMA ROTA",
+            "MAPA DE MARICÁ/RJ — SELECIONE UMA ROTA",
             True,
             cores["texto_escuro"],
         )
