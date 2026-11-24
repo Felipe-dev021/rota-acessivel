@@ -1,9 +1,9 @@
-"""Gerenciador de fases, mapas em grade 20x11 e métricas de aprendizado.
+"""Gerenciador das 4 fases progressivas, mapas 20x11 e avaliação de autonomia.
 
-Implementa a classe GerenciadorFases, responsável por instanciar os grupos de
-sprites (grupo_barreiras, grupo_solidos e grupo_interativos) a partir de mapas
-em matriz de caracteres, gerenciar tempo e orçamento de recursos, reiniciar
-fases e registrar métricas observáveis de evolução do jogador.
+Implementa a classe GerenciadorFases com dificuldade crescente em 4 cenários
+urbanos reais, validação de grupos de sprites e classificação qualitativa de
+desempenho (Rota Segura, Rota Eficiente, Rota Exemplar — 1 a 3 Selos de
+Acessibilidade) baseada em aprendizado observável (sem "só PBL").
 """
 
 from typing import Dict, List, Tuple
@@ -13,38 +13,59 @@ import pygame
 from barreira import Barreira
 from config import (
     COLS,
+    CUSTO_OTIMO_FASE_1,
+    CUSTO_OTIMO_FASE_2,
+    CUSTO_OTIMO_FASE_3,
+    CUSTO_OTIMO_FASE_4,
+    NIVEL_AUTONOMIA_BLOQUEADA,
+    NIVEL_AUTONOMIA_EFICIENTE,
+    NIVEL_AUTONOMIA_EXEMPLAR,
+    NIVEL_AUTONOMIA_SEGURA,
+    RECURSOS_FASE_1,
+    RECURSOS_FASE_2,
+    RECURSOS_FASE_3,
+    RECURSOS_FASE_4,
     ROWS,
+    TEMPO_FASE_1,
+    TEMPO_FASE_2,
+    TEMPO_FASE_3,
+    TEMPO_FASE_4,
+    TIPO_AVISO_SONORO,
     TIPO_BURACO,
     TIPO_DEGRAU,
     TIPO_DESTINO,
     TIPO_LIXEIRA,
     TIPO_POSTE,
+    TIPO_SEM_PISO_TATIL,
 )
 
 Celula = Tuple[int, int]
 
 
 class GerenciadorFases:
-    """Controla a progressão de fases, os grupos de sprites e as métricas."""
+    """Controla as 4 fases progressivas, grupos de colisão e avaliação qualitativa."""
 
     # Legenda dos mapas 20x11:
-    # '.' = faixa livre | 'I' = início do Morador | 'J' = início de Alex
-    # 'F' = destino     | 'P' = poste fixo        | 'L' = lixeira (0 rec)
-    # 'D' = degrau (1)  | 'B' = buraco (1)
-    FASES_INICIAIS: List[Dict[str, object]] = [
+    # '.' = faixa livre     | 'I' = início do Morador | 'J' = início de Alex
+    # 'F' = destino         | 'P' = poste fixo        | 'L' = lixeira (0 rec)
+    # 'D' = degrau (1 rec)  | 'B' = buraco (1 rec)    | 'T' = sem piso tátil (1)
+    # 'S' = aviso sonoro (1)
+    FASES_CAMPANHA: List[Dict[str, object]] = [
         {
             "numero": 1,
             "nome": "Calçada do Bairro",
-            "tempo": 90.0,
-            "recursos": 3,
+            "perfil_morador": "Morador em cadeira de rodas",
+            "tempo": TEMPO_FASE_1,
+            "recursos": RECURSOS_FASE_1,
+            "custo_otimo": CUSTO_OTIMO_FASE_1,
             "descricao": (
-                "Remova as lixeiras sem custo e instale uma rampa no degrau "
-                "para garantir uma faixa livre contínua."
+                "Morador cadeirante: desloque lixeiras (0 rec) e instale uma "
+                "rampa no degrau para liberar uma faixa livre contínua."
             ),
             "aprendizado": (
-                "ABNT NBR 9050 — Faixa Livre: toda calçada deve manter uma "
-                "faixa livre contínua de no mínimo 1,20 m sem obstáculos "
-                "soltos e com desníveis devidamente rebaixados."
+                "ABNT NBR 9050 — Faixa Livre: toda calçada deve manter faixa "
+                "livre contínua de no mínimo 1,20 m sem mobiliário solto e "
+                "com desníveis rebaixados para circulação autônoma."
             ),
             "mapa": [
                 "PPPPPPPPPPPPPPPPPPPP",
@@ -63,16 +84,18 @@ class GerenciadorFases:
         {
             "numero": 2,
             "nome": "Entrada da Escola",
-            "tempo": 80.0,
-            "recursos": 4,
+            "perfil_morador": "Estudante em cadeira de rodas",
+            "tempo": TEMPO_FASE_2,
+            "recursos": RECURSOS_FASE_2,
+            "custo_otimo": CUSTO_OTIMO_FASE_2,
             "descricao": (
-                "Contorne os postes fixos em gargalos estreitos, remova as "
-                "lixeiras e adapte degraus e buraco."
+                "Estudante cadeirante: contorne postes fixos em gargalos "
+                "estreitos e resolva lixeiras, degraus e buraco no piso."
             ),
             "aprendizado": (
-                "ABNT NBR 9050 — Rota Acessível Contínua: postes devem ficar "
-                "na faixa de serviço. Em gargalos estreitos, qualquer degrau "
-                "ou buraco sem correção interrompe toda a autonomia."
+                "ABNT NBR 9050 — Rota Acessível Contínua: postes pertencem à "
+                "faixa de serviço. Em passagens estreitas, qualquer degrau ou "
+                "buraco sem correção bloqueia o acesso à educação."
             ),
             "mapa": [
                 "PPPPPPPPPPPPPPPPPPPP",
@@ -90,29 +113,61 @@ class GerenciadorFases:
         },
         {
             "numero": 3,
-            "nome": "Caminho ao Posto de Saúde",
-            "tempo": 70.0,
-            "recursos": 4,
+            "nome": "Praça Comunitária",
+            "perfil_morador": "Morador surdo (acessibilidade comunicacional)",
+            "tempo": TEMPO_FASE_3,
+            "recursos": RECURSOS_FASE_3,
+            "custo_otimo": CUSTO_OTIMO_FASE_3,
             "descricao": (
-                "Observe todo o mapa antes de gastar recursos — cuidado com "
-                "o corredor superior fechado por postes fixos!"
+                "Morador surdo: elimine barreiras físicas e substitua avisos "
+                "exclusivamente sonoros por painéis visuais acessíveis."
             ),
             "aprendizado": (
-                "ABNT NBR 9050 — Planejamento Urbano: diagnosticar a rota "
-                "completa evita investir orçamento limitado em corredores sem "
-                "saída e garante acesso digno a serviços essenciais."
+                "Lei nº 13.146/2015 (LBI) — Acessibilidade Comunicacional: "
+                "alertas exclusivamente sonoros excluem pessoas surdas. Toda "
+                "informação urbana essencial precisa combinar som e imagem."
             ),
             "mapa": [
                 "PPPPPPPPPPPPPPPPPPPP",
-                "P.....P....P...P.P.P",
-                "P.....D....B...P.P.P",
-                "P.....P....P...P.P.P",
-                "P...PPPPPPPPPPPP.P.P",
-                "I.J.L...P...P..P.D.F",
-                "P...P...D...P..B.P.P",
-                "P...P...P...B..P.P.P",
-                "P...P...P...P..P.P.P",
-                "P...P...P...P..P.P.P",
+                "P....P...P...P..P.PP",
+                "P....L...P...P..P.PP",
+                "P....P...P...P..P.PP",
+                "I.J..P...P...D..P.PP",
+                "P....P...P...P..S.LF",
+                "P....P...P...P..P.PP",
+                "P....P...S...P..P.PP",
+                "P....P...P...P..P.PP",
+                "P....P...P...P..P.PP",
+                "PPPPPPPPPPPPPPPPPPPP",
+            ],
+        },
+        {
+            "numero": 4,
+            "nome": "Caminho ao Posto de Saúde",
+            "perfil_morador": "Morador com baixa visão / cadeirante",
+            "tempo": TEMPO_FASE_4,
+            "recursos": RECURSOS_FASE_4,
+            "custo_otimo": CUSTO_OTIMO_FASE_4,
+            "descricao": (
+                "Orçamento contado (5 rec): inspecione o mapa antes de agir! "
+                "O corredor superior termina fechado por postes fixos."
+            ),
+            "aprendizado": (
+                "ABNT NBR 9050 — Desenho Universal e Planejamento: combinar "
+                "piso tátil direcional, rampas e pavimento nivelado com "
+                "diagnóstico prévio da rota evita desperdício de orçamento."
+            ),
+            "mapa": [
+                "PPPPPPPPPPPPPPPPPPPP",
+                "P....P....P....P.P.P",
+                "P....D....B....P.P.P",
+                "P....P....P....P.P.P",
+                "P..PPPPPPPPPPPPP.P.P",
+                "I.JL..P..P..P..P.T.F",
+                "P..P..D..P..T..P.P.P",
+                "P..P..P..B..P..D.P.P",
+                "P..P..P..P..P..P.P.P",
+                "P..P..P..P..P..P.P.P",
                 "PPPPPPPPPPPPPPPPPPPP",
             ],
         },
@@ -122,15 +177,18 @@ class GerenciadorFases:
         "L": TIPO_LIXEIRA,
         "D": TIPO_DEGRAU,
         "B": TIPO_BURACO,
+        "T": TIPO_SEM_PISO_TATIL,
+        "S": TIPO_AVISO_SONORO,
         "P": TIPO_POSTE,
         "F": TIPO_DESTINO,
     }
 
     def __init__(self) -> None:
-        """Inicializa o gerenciador na primeira fase e cria os grupos de sprites."""
+        """Inicializa o gerenciador na Fase 1 com os grupos de sprites vazios."""
         self.indice_atual: int = 0
         self.tempo_restante: float = 0.0
         self.recursos: int = 0
+        self.recursos_iniciais: int = 0
         self.intervencoes_fase: int = 0
         self.tentativas_teste_fase: int = 0
         self.erros_rota_fase: int = 0
@@ -139,7 +197,6 @@ class GerenciadorFases:
         self.inicio_jogador: Celula = (2, 5)
         self.destino: Celula = (COLS - 1, 5)
 
-        # Grupos separados exclusivamente para consulta e colisão
         self.grupo_barreiras: pygame.sprite.Group = pygame.sprite.Group()
         self.grupo_solidos: pygame.sprite.Group = pygame.sprite.Group()
         self.grupo_interativos: pygame.sprite.Group = pygame.sprite.Group()
@@ -148,20 +205,20 @@ class GerenciadorFases:
 
     @property
     def total_fases(self) -> int:
-        """Retorna a quantidade total de fases cadastradas."""
-        return len(self.FASES_INICIAIS)
+        """Retorna a quantidade total de fases da campanha (4 fases)."""
+        return len(self.FASES_CAMPANHA)
 
     @property
     def metadados_atual(self) -> Dict[str, object]:
-        """Retorna o dicionário completo de metadados da fase atual."""
-        return self.FASES_INICIAIS[self.indice_atual]
+        """Retorna o dicionário de metadados da fase atual."""
+        return self.FASES_CAMPANHA[self.indice_atual]
 
     def reiniciar_campanha(
         self,
         modo_alto_contraste: bool = False,
         fonte_grande: bool = False,
     ) -> None:
-        """Reinicia o jogo desde a Fase 1 limpando o histórico de métricas.
+        """Reinicia a campanha desde a Fase 1 limpando as métricas da sessão.
 
         Args:
             modo_alto_contraste: Estado atual do modo de alto contraste.
@@ -177,17 +234,18 @@ class GerenciadorFases:
         modo_alto_contraste: bool = False,
         fonte_grande: bool = False,
     ) -> None:
-        """Instancia os grupos de sprites e recursos a partir da matriz 20x11.
+        """Carrega o mapa 20x11, tempo, orçamento e grupos da fase informada.
 
         Args:
-            indice: Índice da fase baseado em zero (0 a total_fases - 1).
+            indice: Índice da fase baseado em zero (0 a 3).
             modo_alto_contraste: Ativa renderização de alto contraste nos tiles.
             fonte_grande: Usa fonte ampliada nas siglas de alto contraste.
         """
         self.indice_atual = indice
-        dados_fase = self.FASES_INICIAIS[indice]
+        dados_fase = self.FASES_CAMPANHA[indice]
         self.tempo_restante = float(dados_fase["tempo"])
         self.recursos = int(dados_fase["recursos"])
+        self.recursos_iniciais = self.recursos
         self.intervencoes_fase = 0
         self.tentativas_teste_fase = 0
         self.erros_rota_fase = 0
@@ -240,31 +298,60 @@ class GerenciadorFases:
         """
         self.carregar_fase(self.indice_atual, modo_alto_contraste, fonte_grande)
 
-    def registrar_metricas_fase(self, concluida: bool) -> Dict[str, object]:
-        """Registra as métricas de aprendizado observável da fase atual.
+    def classificar_autonomia(self, concluida: bool) -> Tuple[str, int]:
+        """Classifica qualitativamente o desempenho na fase em Selos de Acessibilidade.
+
+        Avalia autonomia observável (erros de rota evitados e eficiência no uso
+        do orçamento limitado), evitando pontuação genérica sem significado:
+        - 3 Selos ('Rota Exemplar'): 0 erros de rota e gasto dentro do custo ótimo.
+        - 2 Selos ('Rota Eficiente'): até 1 erro de rota ou eficiência parcial.
+        - 1 Selo ('Rota Segura'): rota contínua concluída com múltiplos ajustes.
+        - 0 Selos ('Rota Bloqueada'): tempo esgotado antes de liberar a rota.
 
         Args:
-            concluida: True se o Morador alcançou o destino; False se o tempo zerou.
+            concluida: True se o Morador chegou ao destino; False caso contrário.
 
         Returns:
-            Dicionário com o resumo estruturado da fase registrada.
+            Tupla (nome_nivel_autonomia, quantidade_selos).
+        """
+        if not concluida:
+            return NIVEL_AUTONOMIA_BLOQUEADA, 0
+
+        recursos_gastos = self.recursos_iniciais - self.recursos
+        custo_otimo = int(self.metadados_atual["custo_otimo"])
+
+        if self.erros_rota_fase == 0 and recursos_gastos <= custo_otimo:
+            return NIVEL_AUTONOMIA_EXEMPLAR, 3
+        if self.erros_rota_fase <= 1 and recursos_gastos <= custo_otimo + 1:
+            return NIVEL_AUTONOMIA_EFICIENTE, 2
+        return NIVEL_AUTONOMIA_SEGURA, 1
+
+    def registrar_metricas_fase(self, concluida: bool) -> Dict[str, object]:
+        """Registra as métricas de aprendizado e nível de autonomia da fase atual.
+
+        Args:
+            concluida: True se a fase foi concluída; False em tempo esgotado.
+
+        Returns:
+            Dicionário com o resumo completo da fase registrada.
         """
         meta = self.metadados_atual
-        autonomia = (
-            "100% — Rota Contínua"
-            if concluida and self.erros_rota_fase == 0
-            else ("Alcançada com Ajustes" if concluida else "Bloqueada (Tempo Esgotado)")
-        )
+        nivel_autonomia, selos = self.classificar_autonomia(concluida)
+        recursos_gastos = self.recursos_iniciais - self.recursos
 
         registro: Dict[str, object] = {
             "numero": int(meta["numero"]),
             "nome": str(meta["nome"]),
+            "perfil_morador": str(meta["perfil_morador"]),
             "intervencoes": self.intervencoes_fase,
+            "recursos_gastos": recursos_gastos,
             "tentativas_teste": self.tentativas_teste_fase,
             "erros_rota": self.erros_rota_fase,
             "tempo_restante": round(max(0.0, self.tempo_restante), 1),
             "recursos_restantes": self.recursos,
-            "autonomia_alcancada": autonomia,
+            "autonomia_alcancada": f"{nivel_autonomia} ({selos}/3)",
+            "nivel_autonomia": nivel_autonomia,
+            "selos": selos,
             "concluida": concluida,
         }
 
@@ -281,14 +368,14 @@ class GerenciadorFases:
         modo_alto_contraste: bool = False,
         fonte_grande: bool = False,
     ) -> bool:
-        """Carrega a próxima fase se houver.
+        """Avança para a próxima fase caso ainda haja fases restantes.
 
         Args:
             modo_alto_contraste: Estado atual do modo de alto contraste.
             fonte_grande: Estado atual da escala de fonte.
 
         Returns:
-            True se uma nova fase foi carregada; False ao fim da campanha.
+            True se carregou a próxima fase; False se concluiu todas as 4 fases.
         """
         if self.indice_atual + 1 < self.total_fases:
             self.carregar_fase(self.indice_atual + 1, modo_alto_contraste, fonte_grande)
@@ -296,10 +383,10 @@ class GerenciadorFases:
         return False
 
     def obter_grade_barreiras(self) -> Dict[Celula, Barreira]:
-        """Retorna um dicionário {(col, lin): Barreira} para consulta pelo BFS.
+        """Constrói o dicionário {(col, lin): Barreira} para o algoritmo BFS.
 
         Returns:
-            Mapa associando cada célula ocupada à sua instância Barreira.
+            Mapa de todas as células atualmente ocupadas por sprites Barreira.
         """
         grade: Dict[Celula, Barreira] = {}
         for sprite in self.grupo_barreiras:

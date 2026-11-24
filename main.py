@@ -196,7 +196,7 @@ class JogoRotaAcessivel:
         self.estado = ESTADO_JOGANDO
         self._tocar_som("clique")
         self.hud.definir_feedback(
-            "Fase reiniciada! Analise a calçada antes de aplicar recursos.",
+            f"Fase reiniciada — {self.fases.metadados_atual['descricao']}",
             "OK",
             DURACAO_FEEDBACK,
         )

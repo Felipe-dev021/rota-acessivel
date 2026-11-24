@@ -90,6 +90,30 @@ CUSTO_SEM_PISO_TATIL = 1
 CUSTO_AVISO_SONORO = 1
 
 # =============================================================================
+# ORÇAMENTO, TEMPO E CLASSIFICAÇÃO QUALITATIVA DE AUTONOMIA (4 FASES)
+# =============================================================================
+TEMPO_FASE_1 = 90.0
+RECURSOS_FASE_1 = 3
+CUSTO_OTIMO_FASE_1 = 1
+
+TEMPO_FASE_2 = 80.0
+RECURSOS_FASE_2 = 4
+CUSTO_OTIMO_FASE_2 = 3
+
+TEMPO_FASE_3 = 75.0
+RECURSOS_FASE_3 = 4
+CUSTO_OTIMO_FASE_3 = 3
+
+TEMPO_FASE_4 = 70.0
+RECURSOS_FASE_4 = 5
+CUSTO_OTIMO_FASE_4 = 5
+
+NIVEL_AUTONOMIA_EXEMPLAR = "Rota Exemplar"
+NIVEL_AUTONOMIA_EFICIENTE = "Rota Eficiente"
+NIVEL_AUTONOMIA_SEGURA = "Rota Segura"
+NIVEL_AUTONOMIA_BLOQUEADA = "Rota Bloqueada"
+
+# =============================================================================
 # ESTADOS DA MÁQUINA DE ESTADOS
 # =============================================================================
 ESTADO_MENU = "MENU"
