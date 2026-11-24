@@ -1,9 +1,9 @@
 """Configurações centralizadas (Fonte Única da Verdade) do jogo 'Rota Acessível'.
 
-Todas as constantes de janela, grade, física, tempos, custos, paletas de cores
-(normal acolhedora estilo cartoon e alto contraste), escalas de fonte (normal e
-grande), perfis de moradores, estados da máquina de estados, nomes de assets e
-funções de resolução de caminhos compatíveis com Python e PyInstaller ficam aqui.
+Todas as constantes de janela, grade, física ágil, tempos, custos, paletas
+inspiradas em Maricá/RJ (modo normal ensolarado e modo alto contraste), escalas
+de fonte, perfis de moradores, estados da máquina de estados, nomes de assets e
+resolução de caminhos compatíveis com Python e PyInstaller residem aqui.
 """
 
 import os
@@ -51,7 +51,7 @@ def caminho_save(nome_arquivo: str) -> str:
 # =============================================================================
 # JANELA, GRADE E TAXA DE QUADROS
 # =============================================================================
-TITULO_JOGO = "Rota Acessível — Vila Nova (Acessibilidade e Inclusão)"
+TITULO_JOGO = "Rota Acessível — Maricá/RJ (Acessibilidade e Inclusão)"
 TILE = 48
 COLS = 20
 ROWS = 11
@@ -62,22 +62,23 @@ FPS = 60
 DT_MAXIMO = 0.05                   # teto de delta time para estabilidade física
 
 # =============================================================================
-# FÍSICA, MOVIMENTO FLUIDO E INTERAÇÃO
+# FÍSICA ÁGIL, SPRINT E INTERAÇÃO
 # =============================================================================
-VELOCIDADE_JOGADOR = 245.0         # pixels por segundo (ágil e responsivo)
-ACELERACAO_JOGADOR = 18.0          # suavidade de arranque/parada
-CORNER_NUDGE_MAX = 16              # deslizamento automático em quinas (px)
-VELOCIDADE_MORADOR = 205.0         # pixels por segundo
-RAIO_INTERACAO = 72.0              # raio confortável para destaque [E]
-HITBOX_JOGADOR_MARGEM = 11         # hitbox 26x26 dentro de 48x48 (zero travamento)
+VELOCIDADE_JOGADOR = 275.0         # pixels por segundo (resposta imediata)
+VELOCIDADE_SPRINT = 380.0          # pixels por segundo segurando SHIFT
+CORNER_NUDGE_MAX = 18              # deslizamento automático em quinas (px)
+VELOCIDADE_MORADOR = 230.0         # pixels por segundo
+RAIO_INTERACAO = 76.0              # raio confortável para destaque [E]
+HITBOX_JOGADOR_MARGEM = 12         # hitbox 24x24 dentro de 48x48 (zero travamento)
 
 # =============================================================================
 # REGRAS DE TEMPO, PENALIDADE E FEEDBACK
 # =============================================================================
 PENALIDADE_ERRO = 5.0              # segundos descontados ao encontrar bloqueio
 TEMPO_ALERTA_CRITICO = 15.0        # segundos para alerta visual no cronômetro
-DURACAO_FEEDBACK = 7.0             # segundos de exibição da barra educativa
+DURACAO_FEEDBACK = 6.5             # segundos de exibição da barra educativa
 ALTURA_FEEDBACK = 64               # altura da faixa educativa inferior
+DURACAO_POPUP = 1.25               # segundos dos textos flutuantes de ação
 
 # =============================================================================
 # CUSTOS DAS INTERVENÇÕES DE ACESSIBILIDADE
@@ -89,7 +90,7 @@ CUSTO_SEM_PISO_TATIL = 1
 CUSTO_AVISO_SONORO = 1
 
 # =============================================================================
-# ORÇAMENTO, TEMPO E CLASSIFICAÇÃO QUALITATIVA DE AUTONOMIA (4 FASES)
+# ORÇAMENTO, TEMPO E CLASSIFICAÇÃO QUALITATIVA DE AUTONOMIA (4 FASES MARICÁ/RJ)
 # =============================================================================
 TEMPO_FASE_1 = 90.0
 RECURSOS_FASE_1 = 3
@@ -178,7 +179,7 @@ ARQUIVO_SAVE_PROGRESSO = "progresso.json"
 # =============================================================================
 AUDIO_SAMPLE_RATE = 22050
 AUDIO_VOLUME_EFEITOS = 0.45
-AUDIO_VOLUME_MUSICA = 0.22
+AUDIO_VOLUME_MUSICA = 0.20
 
 # =============================================================================
 # ESCALAS DE FONTE (ACESSIBILIDADE: TECLA [F] NORMAL / GRANDE)
@@ -206,47 +207,49 @@ FONTES_GRANDE = {
 BORDA_ALTO_CONTRASTE = 4
 
 # =============================================================================
-# PALETAS DE CORES (CARTOON URBANO ACOLHEDOR E MODO ALTO CONTRASTE)
+# PALETAS DE CORES (IDENTIDADE ENSOLARADA DE MARICÁ/RJ E ALTO CONTRASTE)
 # =============================================================================
 CORES_NORMAL = {
-    "fundo_tela": (244, 236, 224),       # creme quente acolhedor (estilo Vila Nova)
-    "faixa_servico": (122, 168, 108),    # grama / canteiro urbano lateral
-    "asfalto": (78, 86, 98),             # rua asfaltada na borda inferior
-    "faixa_rua": (245, 240, 226),        # faixas de pedestres
-    "calcada_clara": (235, 228, 214),    # piso de calçada ensolarada
-    "calcada_escura": (225, 217, 202),   # alternância sutil de lajotas
-    "meio_fio": (184, 174, 158),         # borda da calçada
-    "grade_linha": (208, 200, 186),      # junta discreta das lajotas
-    "hud_fundo": (38, 52, 68),           # barra superior azul-ardósia elegante
-    "hud_cartao": (52, 70, 90),          # pílulas internas do HUD
-    "hud_borda": (232, 168, 72),         # filete dourado quente
+    "fundo_tela": (246, 239, 226),       # areia clara ensolarada de Maricá
+    "lagoa_azul": (42, 157, 204),        # Lagoa de Araçatiba / Itaipuaçu
+    "lagoa_brilho": (118, 208, 238),     # reflexo da água
+    "ciclovia_vermelha": (196, 54, 54),  # ciclovia / identidade Vermelhinho
+    "vermelhinho": (214, 40, 40),        # ônibus Tarifa Zero de Maricá
+    "faixa_servico": (92, 158, 86),      # gramado / restinga verde
+    "asfalto": (74, 82, 94),             # via asfaltada
+    "faixa_rua": (248, 244, 234),        # faixa de pedestres
+    "calcada_clara": (238, 231, 216),    # pedra portuguesa / calçadão claro
+    "calcada_escura": (228, 220, 204),   # alternância sutil das lajotas
+    "meio_fio": (182, 172, 154),         # meio-fio
+    "grade_linha": (212, 204, 188),      # junta suave
+    "hud_fundo": (26, 46, 68),           # azul-marinho litorâneo
+    "hud_cartao": (38, 64, 92),          # cartões internos do HUD
+    "hud_borda": (220, 56, 56),          # filete vermelho Maricá
     "texto_principal": (250, 248, 244),
-    "texto_escuro": (42, 34, 28),        # texto em cartões claros
-    "texto_secundario": (205, 216, 228),
-    "texto_suave_escuro": (106, 92, 80),
-    "destaque_e": (255, 198, 41),
-    "destaque_e_texto": (34, 26, 18),
-    "sucesso_fundo": (26, 104, 72),
+    "texto_escuro": (36, 32, 28),
+    "texto_secundario": (205, 220, 234),
+    "texto_suave_escuro": (102, 90, 78),
+    "destaque_e": (255, 202, 40),
+    "destaque_e_texto": (30, 24, 18),
+    "sucesso_fundo": (22, 108, 72),
     "sucesso_borda": (74, 222, 128),
-    "erro_fundo": (153, 38, 38),
+    "erro_fundo": (162, 34, 34),
     "erro_borda": (252, 165, 165),
     "aviso": (251, 191, 36),
-    "botao_fundo": (255, 251, 245),
-    "botao_hover": (254, 240, 214),
-    "botao_borda": (196, 122, 62),
-    "painel_fundo": (252, 247, 238),
-    "painel_borda": (186, 154, 118),
-    "rota_livre": (34, 176, 98),
-    "rota_preview": (42, 157, 214),
-    "partida_marcador": (37, 99, 215),
-    "destino_marcador": (22, 156, 84),
-    "overlay": (24, 30, 40, 188),
-    # Cores temáticas por fase (fachadas/elementos decorativos)
-    "fase_1_acento": (214, 116, 68),
-    "fase_2_acento": (59, 130, 196),
-    "fase_3_acento": (68, 158, 106),
-    "fase_4_acento": (212, 76, 76),
-    # Cores de referência para tiles/partículas
+    "botao_fundo": (255, 252, 246),
+    "botao_hover": (254, 238, 212),
+    "botao_borda": (206, 58, 52),
+    "painel_fundo": (253, 249, 240),
+    "painel_borda": (184, 156, 122),
+    "rota_livre": (28, 178, 96),
+    "rota_preview": (36, 156, 218),
+    "partida_marcador": (32, 98, 214),
+    "destino_marcador": (204, 44, 44),
+    "overlay": (20, 28, 38, 188),
+    "fase_1_acento": (42, 157, 204),     # Araçatiba (azul lagoa)
+    "fase_2_acento": (214, 124, 52),     # Centro/Escola (terracota)
+    "fase_3_acento": (244, 196, 48),     # Praça Orlando (ipê amarelo)
+    "fase_4_acento": (214, 48, 48),      # Posto de Saúde (vermelho saúde)
     "tile_lixeira": (46, 134, 95),
     "tile_degrau": (186, 104, 52),
     "tile_buraco": (82, 70, 74),
@@ -264,6 +267,10 @@ CORES_NORMAL = {
 
 CORES_ALTO_CONTRASTE = {
     "fundo_tela": (0, 0, 0),
+    "lagoa_azul": (0, 48, 80),
+    "lagoa_brilho": (0, 255, 255),
+    "ciclovia_vermelha": (90, 0, 0),
+    "vermelhinho": (255, 60, 60),
     "faixa_servico": (28, 28, 28),
     "asfalto": (12, 12, 12),
     "faixa_rua": (255, 255, 255),
@@ -295,10 +302,10 @@ CORES_ALTO_CONTRASTE = {
     "partida_marcador": (0, 200, 255),
     "destino_marcador": (255, 255, 0),
     "overlay": (0, 0, 0, 224),
-    "fase_1_acento": (255, 255, 0),
-    "fase_2_acento": (0, 255, 255),
-    "fase_3_acento": (0, 255, 128),
-    "fase_4_acento": (255, 120, 0),
+    "fase_1_acento": (0, 255, 255),
+    "fase_2_acento": (255, 165, 0),
+    "fase_3_acento": (255, 255, 0),
+    "fase_4_acento": (255, 80, 80),
     "tile_lixeira": (0, 175, 255),
     "tile_degrau": (255, 128, 0),
     "tile_buraco": (235, 0, 180),

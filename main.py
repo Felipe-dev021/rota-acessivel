@@ -93,6 +93,9 @@ class JogoRotaAcessivel:
         self._reconstruir_grupo_desenho()
         self.ultimo_resumo_fase: Dict[str, object] = {}
         self.indice_mapa_selecionado: int = 0
+        self.modo_raio_x: bool = False
+        self.barreira_ultimo_erro = None
+        self._temporizador_poeira: float = 0.0
 
     def _carregar_sons(self) -> Dict[str, Optional[pygame.mixer.Sound]]:
         """Carrega os efeitos WAV via caminho_arquivo() com proteção contra falhas.
@@ -175,6 +178,7 @@ class JogoRotaAcessivel:
         self._reconstruir_grupo_desenho()
         self.particulas.limpar()
         self.hud.limpar_feedback()
+        self.barreira_ultimo_erro = None
 
     def _salvar_preferencias(self) -> None:
         """Persiste as preferências atuais de acessibilidade em progresso.json."""
@@ -285,17 +289,28 @@ class JogoRotaAcessivel:
             return
 
         centro_barreira = barreira.centro()
-        cor_particula = self.hud.paleta(self.modo_alto_contraste)["sucesso_borda"]
+        rotulo_popup = f"{barreira.rotulo_acao.upper()} OK!"
+        paleta = self.hud.paleta(self.modo_alto_contraste)
+        cor_particula = paleta["sucesso_borda"]
         resolvida, mensagem = barreira.resolver(
             self.modo_alto_contraste, self.fonte_grande
         )
         if resolvida:
             self.fases.recursos -= barreira.custo
             self.fases.intervencoes_fase += 1
+            if barreira is self.barreira_ultimo_erro:
+                self.barreira_ultimo_erro = None
             if not barreira.alteravel and barreira in self.fases.grupo_interativos:
                 self.fases.grupo_interativos.remove(barreira)
             self.particulas.emitir_intervencao(
                 centro_barreira[0], centro_barreira[1], cor_particula[:3]
+            )
+            self.hud.adicionar_popup(
+                centro_barreira[0],
+                centro_barreira[1] - 18,
+                rotulo_popup,
+                paleta["sucesso_fundo"],
+                paleta["texto_principal"],
             )
             self._tocar_som("acao")
 
@@ -521,6 +536,9 @@ class JogoRotaAcessivel:
             self._reiniciar_fase_atual()
         elif tecla == pygame.K_e:
             self._aplicar_intervencao()
+        elif tecla == pygame.K_TAB:
+            self.modo_raio_x = not self.modo_raio_x
+            self._tocar_som("clique")
         elif tecla in (pygame.K_SPACE, pygame.K_RETURN):
             self._iniciar_validacao_rota()
 
@@ -575,6 +593,21 @@ class JogoRotaAcessivel:
         self.fases.tempo_restante -= dt
         self.grupo_desenho.update(dt)
 
+        # Poeirinha suave nos pés quando Alex corre com SHIFT
+        if self.jogador.correndo:
+            self._temporizador_poeira += dt
+            if self._temporizador_poeira >= 0.08:
+                self._temporizador_poeira = 0.0
+                cor_poeira = self.hud.paleta(self.modo_alto_contraste)["meio_fio"][:3]
+                self.particulas.emitir_intervencao(
+                    self.jogador.rect.centerx,
+                    self.jogador.rect.bottom - 4,
+                    cor_poeira,
+                    quantidade=2,
+                )
+        else:
+            self._temporizador_poeira = 0.0
+
     def _validar_regras(self) -> None:
         """Valida regras da partida: tempo esgotado e resultado do teste de rota."""
         if self.estado != ESTADO_JOGANDO:
@@ -621,6 +654,7 @@ class JogoRotaAcessivel:
             )
 
             barreira = self.morador.barreira_bloqueadora
+            self.barreira_ultimo_erro = barreira
             explicacao = (
                 barreira.mensagem_erro
                 if barreira is not None and barreira.mensagem_erro
@@ -653,6 +687,13 @@ class JogoRotaAcessivel:
             self.modo_alto_contraste,
         )
         self.grupo_desenho.draw(self.tela)
+        self.hud.desenhar_visao_barreiras(
+            self.tela,
+            self.fases.grupo_interativos,
+            self.barreira_ultimo_erro,
+            self.modo_raio_x,
+            self.modo_alto_contraste,
+        )
         self.hud.desenhar_marcadores_rota(
             self.tela,
             self.fases.inicio_morador,
@@ -661,6 +702,7 @@ class JogoRotaAcessivel:
             self.modo_alto_contraste,
         )
         self.particulas.desenhar(self.tela)
+        self.hud.desenhar_popups(self.tela)
 
         if not self.morador.em_movimento:
             barreira_proxima = self.jogador.obter_barreira_proxima(
