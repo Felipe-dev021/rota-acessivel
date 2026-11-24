@@ -1,9 +1,9 @@
 """Módulo da entidade Morador e algoritmo de validação de rota acessível (BFS).
 
-Implementa a classe Morador (herdeira de pygame.sprite.Sprite), responsável por
-executar a Busca em Largura (BFS) em 4 direções na grade 20x11 para validar a
-continuidade da faixa livre até o destino e percorrer o trajeto suavemente
-tile a tile usando float + dt.
+Implementa a classe Morador (herdeira de pygame.sprite.Sprite) com suporte aos
+3 perfis reais de moradores das fases (cadeirante, pessoa surda e pessoa com
+baixa visão/bengala branca), garantindo coerência visual e educativa com as
+barreiras de cada cenário, além da Busca em Largura (BFS) em 4 direções.
 """
 
 from collections import deque
@@ -14,12 +14,18 @@ import pygame
 from barreira import Barreira
 from config import (
     ARQUIVO_IMG_MORADOR,
+    ARQUIVO_IMG_MORADOR_BAIXA_VISAO,
+    ARQUIVO_IMG_MORADOR_SURDO,
+    BORDA_ALTO_CONTRASTE,
     COLS,
     CORES_ALTO_CONTRASTE,
     FONTE_FAMILIA,
     FONTES_GRANDE,
     FONTES_NORMAL,
     HUD_ALTURA,
+    PERFIL_BAIXA_VISAO,
+    PERFIL_CADEIRANTE,
+    PERFIL_SURDO,
     ROWS,
     TILE,
     TIPO_POSTE,
@@ -32,14 +38,20 @@ GradeBarreiras = Dict[Celula, Barreira]
 
 
 class Morador(pygame.sprite.Sprite):
-    """Representa o Morador que testa a continuidade acessível da rota na via."""
+    """Representa o Morador da fase que valida a continuidade acessível da rota."""
 
     _DIRECOES: Tuple[Celula, ...] = ((1, 0), (-1, 0), (0, 1), (0, -1))
+    _SPRITES_POR_PERFIL: Dict[str, str] = {
+        PERFIL_CADEIRANTE: ARQUIVO_IMG_MORADOR,
+        PERFIL_SURDO: ARQUIVO_IMG_MORADOR_SURDO,
+        PERFIL_BAIXA_VISAO: ARQUIVO_IMG_MORADOR_BAIXA_VISAO,
+    }
 
     def __init__(
         self,
         coluna: int,
         linha: int,
+        perfil: str = PERFIL_CADEIRANTE,
         modo_alto_contraste: bool = False,
         fonte_grande: bool = False,
     ) -> None:
@@ -48,6 +60,7 @@ class Morador(pygame.sprite.Sprite):
         Args:
             coluna: Coluna inicial na grade (0 a COLS - 1).
             linha: Linha inicial na grade (0 a ROWS - 1).
+            perfil: Identificador do perfil ('cadeirante', 'surdo', 'baixa_visao').
             modo_alto_contraste: Define o modo visual inicial.
             fonte_grande: Define a escala de fonte da sigla no alto contraste.
         """
@@ -56,9 +69,14 @@ class Morador(pygame.sprite.Sprite):
         self.inicio_linha: int = linha
         self.pos_x: float = float(coluna * TILE)
         self.pos_y: float = float(HUD_ALTURA + linha * TILE)
+        self.perfil: str = perfil
+        self.modo_alto_contraste: bool = modo_alto_contraste
+        self.fonte_grande: bool = fonte_grande
 
-        self._imagem_normal: pygame.Surface = self._carregar_sprite()
-        self.image: pygame.Surface = self._imagem_normal.copy()
+        self._sprites_cache: Dict[str, pygame.Surface] = {}
+        self._carregar_todos_sprites()
+
+        self.image: pygame.Surface = self._sprites_cache[PERFIL_CADEIRANTE]
         self.rect: pygame.Rect = self.image.get_rect(
             topleft=(round(self.pos_x), round(self.pos_y))
         )
@@ -73,32 +91,44 @@ class Morador(pygame.sprite.Sprite):
 
         self.atualizar_visual(modo_alto_contraste, fonte_grande)
 
-    def _carregar_sprite(self) -> pygame.Surface:
-        """Carrega morador.png a partir da pasta data/ via caminho_arquivo().
+    def _carregar_todos_sprites(self) -> None:
+        """Carrega em cache os 3 sprites de moradores via caminho_arquivo()."""
+        for chave_perfil, nome_arquivo in self._SPRITES_POR_PERFIL.items():
+            superficie = pygame.image.load(caminho_arquivo(nome_arquivo))
+            if pygame.display.get_surface() is not None:
+                superficie = superficie.convert_alpha()
+            if superficie.get_size() != (TILE, TILE):
+                superficie = pygame.transform.smoothscale(superficie, (TILE, TILE))
+            self._sprites_cache[chave_perfil] = superficie
 
-        Returns:
-            Superfície pygame no tamanho TILE x TILE.
+    def definir_perfil(self, perfil: str) -> None:
+        """Altera o perfil visual do Morador conforme a fase carregada.
+
+        Args:
+            perfil: Um dos perfis definidos em config.py.
         """
-        superficie = pygame.image.load(caminho_arquivo(ARQUIVO_IMG_MORADOR))
-        if pygame.display.get_surface() is not None:
-            superficie = superficie.convert_alpha()
-        if superficie.get_size() != (TILE, TILE):
-            superficie = pygame.transform.smoothscale(superficie, (TILE, TILE))
-        return superficie
+        if perfil in self._sprites_cache:
+            self.perfil = perfil
+            self.atualizar_visual(self.modo_alto_contraste, self.fonte_grande)
+
+    def obter_retrato(self, tamanho: int = 40) -> pygame.Surface:
+        """Retorna uma miniatura do sprite do Morador atual para uso no HUD."""
+        base = self._sprites_cache.get(self.perfil, self._sprites_cache[PERFIL_CADEIRANTE])
+        return pygame.transform.smoothscale(base, (tamanho, tamanho))
 
     def atualizar_visual(
         self,
         modo_alto_contraste: bool,
         fonte_grande: bool = False,
     ) -> None:
-        """Atualiza o sprite do Morador entre modo normal e modo alto contraste.
+        """Atualiza o sprite do Morador entre modo cartoon e alto contraste."""
+        self.modo_alto_contraste = modo_alto_contraste
+        self.fonte_grande = fonte_grande
 
-        Args:
-            modo_alto_contraste: True desenha ícone geométrico contrastado 'M'.
-            fonte_grande: True amplia a letra identificadora no alto contraste.
-        """
         if not modo_alto_contraste:
-            self.image = self._imagem_normal.copy()
+            self.image = self._sprites_cache.get(
+                self.perfil, self._sprites_cache[PERFIL_CADEIRANTE]
+            )
         else:
             superficie = pygame.Surface((TILE, TILE), pygame.SRCALPHA)
             pygame.draw.rect(
@@ -111,7 +141,7 @@ class Morador(pygame.sprite.Sprite):
                 superficie,
                 CORES_ALTO_CONTRASTE["tile_borda"],
                 (4, 4, TILE - 8, TILE - 8),
-                3,
+                BORDA_ALTO_CONTRASTE,
                 border_radius=10,
             )
             escala = FONTES_GRANDE if fonte_grande else FONTES_NORMAL
@@ -137,16 +167,7 @@ class Morador(pygame.sprite.Sprite):
         destino: Celula,
         ignorar_postes: bool,
     ) -> Dict[Celula, int]:
-        """Calcula via BFS a menor distância em passos de cada célula ao destino.
-
-        Args:
-            grade_barreiras: Dicionário {(col, lin): Barreira} da fase.
-            destino: Coordenada (col, lin) do ponto de chegada.
-            ignorar_postes: False evita postes fixos; True atravessa qualquer célula.
-
-        Returns:
-            Mapa {celula: distancia_em_passos}.
-        """
+        """Calcula via BFS a menor distância em passos de cada célula ao destino."""
         distancias: Dict[Celula, int] = {destino: 0}
         fila: deque[Celula] = deque([destino])
 
@@ -188,19 +209,9 @@ class Morador(pygame.sprite.Sprite):
     ) -> Tuple[bool, List[Celula], Optional[Barreira]]:
         """Executa BFS em 4 direções sobre a grade 20x11 do início ao destino.
 
-        Se existir faixa livre contínua, retorna (True, caminho_completo, None).
-        Caso contrário, localiza a barreira não resolvida mais próxima no rumo
-        do destino e retorna (False, caminho_parcial_ate_anterior, barreira).
-
-        Args:
-            grade_barreiras: Dicionário {(col, lin): Barreira} da fase atual.
-            inicio: Célula de partida do Morador.
-            destino: Célula do destino da fase.
-
         Returns:
             Tupla (sucesso, caminho, barreira_bloqueadora).
         """
-        # 1. BFS em 4 direções percorrendo apenas células transitáveis
         pais: Dict[Celula, Optional[Celula]] = {inicio: None}
         dist_inicio: Dict[Celula, int] = {inicio: 0}
         fila: deque[Celula] = deque([inicio])
@@ -220,7 +231,6 @@ class Morador(pygame.sprite.Sprite):
                     dist_inicio[vizinha] = dist_inicio[(col, lin)] + 1
                     fila.append(vizinha)
 
-        # 2. Rota bloqueada: escolher a barreira mais avançada no caminho ao destino
         dist_sem_poste = self._distancias_reversas_ao_destino(
             grade_barreiras, destino, ignorar_postes=False
         )
@@ -269,13 +279,7 @@ class Morador(pygame.sprite.Sprite):
         rota_sucesso: bool,
         barreira_bloqueadora: Optional[Barreira],
     ) -> None:
-        """Inicia o deslocamento do Morador ao longo do trajeto retornado pelo BFS.
-
-        Args:
-            caminho: Sequência de células (col, lin) a percorrer.
-            rota_sucesso: True se o trajeto atinge o destino; False se bloqueado.
-            barreira_bloqueadora: Barreira encontrada em caso de bloqueio.
-        """
+        """Inicia o deslocamento do Morador ao longo do trajeto retornado pelo BFS."""
         self.reposicionar(self.inicio_coluna, self.inicio_linha)
         self.caminho = list(caminho)
         self.celulas_percorridas = [self.caminho[0]] if self.caminho else []
@@ -296,22 +300,13 @@ class Morador(pygame.sprite.Sprite):
         self.reposicionar(self.inicio_coluna, self.inicio_linha)
 
     def consumir_resultado(self) -> Optional[str]:
-        """Retorna e limpa o resultado final ('VITORIA' ou 'BLOQUEADO') quando pronto.
-
-        Returns:
-            'VITORIA', 'BLOQUEADO' ou None se o teste não tiver concluído.
-        """
+        """Retorna e limpa o resultado final ('VITORIA' ou 'BLOQUEADO') quando pronto."""
         resultado = self.resultado_pendente
         self.resultado_pendente = None
         return resultado
 
     def reposicionar(self, coluna: int, linha: int) -> None:
-        """Define a célula inicial e atual do Morador na grade.
-
-        Args:
-            coluna: Coluna alvo.
-            linha: Linha alvo.
-        """
+        """Define a célula inicial e atual do Morador na grade."""
         self.inicio_coluna = coluna
         self.inicio_linha = linha
         self.pos_x = float(coluna * TILE)
@@ -319,15 +314,7 @@ class Morador(pygame.sprite.Sprite):
         self.rect.topleft = (round(self.pos_x), round(self.pos_y))
 
     def update(self, dt: float) -> None:
-        """Move o Morador suavemente tile a tile usando VELOCIDADE_MORADOR * dt.
-
-        Compatível com chamada única por frame via grupo_desenho.update(dt).
-        Ao concluir o trajeto, registra 'VITORIA' ou 'BLOQUEADO' em
-        resultado_pendente para consulta pelo controlador principal.
-
-        Args:
-            dt: Tempo decorrido em segundos desde o último frame.
-        """
+        """Move o Morador suavemente tile a tile usando VELOCIDADE_MORADOR * dt."""
         if not self.em_movimento:
             return
 

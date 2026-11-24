@@ -1,9 +1,9 @@
-"""Gerenciador das 4 fases progressivas, mapas 20x11 e avaliação de autonomia.
+"""Gerenciador das 4 fases progressivas, mapas 20x11 coerentes e autonomia.
 
-Implementa a classe GerenciadorFases com dificuldade crescente em 4 cenários
-urbanos reais, validação de grupos de sprites e classificação qualitativa de
-desempenho (Rota Segura, Rota Eficiente, Rota Exemplar — 1 a 3 Selos de
-Acessibilidade) baseada em aprendizado observável (sem "só PBL").
+Cada fase apresenta um morador com perfil e sprite próprios, coerentes com as
+barreiras daquele cenário urbano (Clara e Lucas cadeirantes; Sofia moradora
+surda a pé; Mateus com baixa visão e bengala branca), garantindo aprendizado
+real sem contradições.
 """
 
 from typing import Dict, List, Tuple
@@ -21,6 +21,9 @@ from config import (
     NIVEL_AUTONOMIA_EFICIENTE,
     NIVEL_AUTONOMIA_EXEMPLAR,
     NIVEL_AUTONOMIA_SEGURA,
+    PERFIL_BAIXA_VISAO,
+    PERFIL_CADEIRANTE,
+    PERFIL_SURDO,
     RECURSOS_FASE_1,
     RECURSOS_FASE_2,
     RECURSOS_FASE_3,
@@ -54,13 +57,16 @@ class GerenciadorFases:
         {
             "numero": 1,
             "nome": "Calçada do Bairro",
-            "perfil_morador": "Morador em cadeira de rodas",
+            "local_destino": "PONTO DE ÔNIBUS",
+            "perfil_id": PERFIL_CADEIRANTE,
+            "nome_morador": "Clara",
+            "perfil_morador": "Clara — Moradora em cadeira de rodas",
             "tempo": TEMPO_FASE_1,
             "recursos": RECURSOS_FASE_1,
             "custo_otimo": CUSTO_OTIMO_FASE_1,
             "descricao": (
-                "Morador cadeirante: desloque lixeiras (0 rec) e instale uma "
-                "rampa no degrau para liberar uma faixa livre contínua."
+                "Clara: 'As lixeiras no meio da calçada e o degrau sem rampa "
+                "bloqueiam meu caminho até o ponto!'"
             ),
             "aprendizado": (
                 "ABNT NBR 9050 — Faixa Livre: toda calçada deve manter faixa "
@@ -69,7 +75,7 @@ class GerenciadorFases:
             ),
             "mapa": [
                 "PPPPPPPPPPPPPPPPPPPP",
-                "PPPPPPPPPPPPPPPPPPPP",
+                "P.....P.....P...P..P",
                 "P.....P.....P...P..P",
                 "P.....P.....P...P..P",
                 "P.....L.....P...P..P",
@@ -77,20 +83,23 @@ class GerenciadorFases:
                 "P.....P.....P...L..P",
                 "P.....P.....P...P..P",
                 "P.....P.....P...P..P",
-                "PPPPPPPPPPPPPPPPPPPP",
+                "P.....P.....P...P..P",
                 "PPPPPPPPPPPPPPPPPPPP",
             ],
         },
         {
             "numero": 2,
             "nome": "Entrada da Escola",
-            "perfil_morador": "Estudante em cadeira de rodas",
+            "local_destino": "ESCOLA MUNICIPAL",
+            "perfil_id": PERFIL_CADEIRANTE,
+            "nome_morador": "Lucas",
+            "perfil_morador": "Lucas — Estudante em cadeira de rodas",
             "tempo": TEMPO_FASE_2,
             "recursos": RECURSOS_FASE_2,
             "custo_otimo": CUSTO_OTIMO_FASE_2,
             "descricao": (
-                "Estudante cadeirante: contorne postes fixos em gargalos "
-                "estreitos e resolva lixeiras, degraus e buraco no piso."
+                "Lucas: 'Os postes estreitam o caminho e os degraus com "
+                "buraco me impedem de entrar na escola sozinho!'"
             ),
             "aprendizado": (
                 "ABNT NBR 9050 — Rota Acessível Contínua: postes pertencem à "
@@ -114,25 +123,28 @@ class GerenciadorFases:
         {
             "numero": 3,
             "nome": "Praça Comunitária",
-            "perfil_morador": "Morador surdo (acessibilidade comunicacional)",
+            "local_destino": "PALCO DO EVENTO",
+            "perfil_id": PERFIL_SURDO,
+            "nome_morador": "Sofia",
+            "perfil_morador": "Sofia — Moradora surda (comunicação visual)",
             "tempo": TEMPO_FASE_3,
             "recursos": RECURSOS_FASE_3,
             "custo_otimo": CUSTO_OTIMO_FASE_3,
             "descricao": (
-                "Morador surdo: elimine barreiras físicas e substitua avisos "
-                "exclusivamente sonoros por painéis visuais acessíveis."
+                "Sofia: 'Os avisos do evento na praça são só por alto-falante! "
+                "Instale painéis visuais para eu me orientar com autonomia.'"
             ),
             "aprendizado": (
                 "Lei nº 13.146/2015 (LBI) — Acessibilidade Comunicacional: "
-                "alertas exclusivamente sonoros excluem pessoas surdas. Toda "
-                "informação urbana essencial precisa combinar som e imagem."
+                "avisos exclusivamente sonoros excluem pessoas surdas. Toda "
+                "informação urbana essencial precisa combinar som e painel visual."
             ),
             "mapa": [
                 "PPPPPPPPPPPPPPPPPPPP",
                 "P....P...P...P..P.PP",
                 "P....L...P...P..P.PP",
                 "P....P...P...P..P.PP",
-                "I.J..P...P...D..P.PP",
+                "I.J..P...P...S..P.PP",
                 "P....P...P...P..S.LF",
                 "P....P...P...P..P.PP",
                 "P....P...S...P..P.PP",
@@ -144,28 +156,31 @@ class GerenciadorFases:
         {
             "numero": 4,
             "nome": "Caminho ao Posto de Saúde",
-            "perfil_morador": "Morador com baixa visão / cadeirante",
+            "local_destino": "POSTO DE SAÚDE",
+            "perfil_id": PERFIL_BAIXA_VISAO,
+            "nome_morador": "Mateus",
+            "perfil_morador": "Mateus — Baixa visão (bengala branca)",
             "tempo": TEMPO_FASE_4,
             "recursos": RECURSOS_FASE_4,
             "custo_otimo": CUSTO_OTIMO_FASE_4,
             "descricao": (
-                "Orçamento contado (5 rec): inspecione o mapa antes de agir! "
-                "O corredor superior termina fechado por postes fixos."
+                "Mateus: 'Preciso de piso tátil e calçada sem buracos! "
+                "Orçamento contado (5 rec): cheque o corredor superior antes!'"
             ),
             "aprendizado": (
-                "ABNT NBR 9050 — Desenho Universal e Planejamento: combinar "
-                "piso tátil direcional, rampas e pavimento nivelado com "
-                "diagnóstico prévio da rota evita desperdício de orçamento."
+                "ABNT NBR 9050 — Orientação Tátil e Planejamento: piso tátil "
+                "direcional e pavimento regular garantem autonomia a pessoas "
+                "cegas ou com baixa visão; planejar evita desperdiçar recursos."
             ),
             "mapa": [
                 "PPPPPPPPPPPPPPPPPPPP",
                 "P....P....P....P.P.P",
-                "P....D....B....P.P.P",
+                "P....T....B....P.P.P",
                 "P....P....P....P.P.P",
                 "P..PPPPPPPPPPPPP.P.P",
                 "I.JL..P..P..P..P.T.F",
-                "P..P..D..P..T..P.P.P",
-                "P..P..P..B..P..D.P.P",
+                "P..P..T..P..T..P.P.P",
+                "P..P..P..B..P..B.P.P",
                 "P..P..P..P..P..P.P.P",
                 "P..P..P..P..P..P.P.P",
                 "PPPPPPPPPPPPPPPPPPPP",
@@ -218,12 +233,7 @@ class GerenciadorFases:
         modo_alto_contraste: bool = False,
         fonte_grande: bool = False,
     ) -> None:
-        """Reinicia a campanha desde a Fase 1 limpando as métricas da sessão.
-
-        Args:
-            modo_alto_contraste: Estado atual do modo de alto contraste.
-            fonte_grande: Estado atual da escala de fonte.
-        """
+        """Reinicia a campanha desde a Fase 1 limpando as métricas da sessão."""
         self.indice_atual = 0
         self.metricas_fases = []
         self.carregar_fase(0, modo_alto_contraste, fonte_grande)
@@ -234,13 +244,7 @@ class GerenciadorFases:
         modo_alto_contraste: bool = False,
         fonte_grande: bool = False,
     ) -> None:
-        """Carrega o mapa 20x11, tempo, orçamento e grupos da fase informada.
-
-        Args:
-            indice: Índice da fase baseado em zero (0 a 3).
-            modo_alto_contraste: Ativa renderização de alto contraste nos tiles.
-            fonte_grande: Usa fonte ampliada nas siglas de alto contraste.
-        """
+        """Carrega o mapa 20x11, tempo, orçamento e grupos da fase informada."""
         self.indice_atual = indice
         dados_fase = self.FASES_CAMPANHA[indice]
         self.tempo_restante = float(dados_fase["tempo"])
@@ -290,30 +294,11 @@ class GerenciadorFases:
         modo_alto_contraste: bool = False,
         fonte_grande: bool = False,
     ) -> None:
-        """Restaura integralmente o mapa, cronômetro e orçamento da fase atual.
-
-        Args:
-            modo_alto_contraste: Estado atual do modo de alto contraste.
-            fonte_grande: Estado atual da escala de fonte.
-        """
+        """Restaura integralmente o mapa, cronômetro e orçamento da fase atual."""
         self.carregar_fase(self.indice_atual, modo_alto_contraste, fonte_grande)
 
     def classificar_autonomia(self, concluida: bool) -> Tuple[str, int]:
-        """Classifica qualitativamente o desempenho na fase em Selos de Acessibilidade.
-
-        Avalia autonomia observável (erros de rota evitados e eficiência no uso
-        do orçamento limitado), evitando pontuação genérica sem significado:
-        - 3 Selos ('Rota Exemplar'): 0 erros de rota e gasto dentro do custo ótimo.
-        - 2 Selos ('Rota Eficiente'): até 1 erro de rota ou eficiência parcial.
-        - 1 Selo ('Rota Segura'): rota contínua concluída com múltiplos ajustes.
-        - 0 Selos ('Rota Bloqueada'): tempo esgotado antes de liberar a rota.
-
-        Args:
-            concluida: True se o Morador chegou ao destino; False caso contrário.
-
-        Returns:
-            Tupla (nome_nivel_autonomia, quantidade_selos).
-        """
+        """Classifica qualitativamente o desempenho na fase em Selos de Acessibilidade."""
         if not concluida:
             return NIVEL_AUTONOMIA_BLOQUEADA, 0
 
@@ -327,14 +312,7 @@ class GerenciadorFases:
         return NIVEL_AUTONOMIA_SEGURA, 1
 
     def registrar_metricas_fase(self, concluida: bool) -> Dict[str, object]:
-        """Registra as métricas de aprendizado e nível de autonomia da fase atual.
-
-        Args:
-            concluida: True se a fase foi concluída; False em tempo esgotado.
-
-        Returns:
-            Dicionário com o resumo completo da fase registrada.
-        """
+        """Registra as métricas de aprendizado e nível de autonomia da fase atual."""
         meta = self.metadados_atual
         nivel_autonomia, selos = self.classificar_autonomia(concluida)
         recursos_gastos = self.recursos_iniciais - self.recursos
@@ -368,26 +346,14 @@ class GerenciadorFases:
         modo_alto_contraste: bool = False,
         fonte_grande: bool = False,
     ) -> bool:
-        """Avança para a próxima fase caso ainda haja fases restantes.
-
-        Args:
-            modo_alto_contraste: Estado atual do modo de alto contraste.
-            fonte_grande: Estado atual da escala de fonte.
-
-        Returns:
-            True se carregou a próxima fase; False se concluiu todas as 4 fases.
-        """
+        """Avança para a próxima fase caso ainda haja fases restantes."""
         if self.indice_atual + 1 < self.total_fases:
             self.carregar_fase(self.indice_atual + 1, modo_alto_contraste, fonte_grande)
             return True
         return False
 
     def obter_lista_fases(self) -> List[Dict[str, object]]:
-        """Retorna resumo das fases da campanha para seleção no Mapa Urbano.
-
-        Returns:
-            Lista de dicionários com numero, nome, perfil_morador, tempo e recursos.
-        """
+        """Retorna resumo das fases da campanha para seleção no Mapa Urbano."""
         return [
             {
                 "numero": int(fase["numero"]),
@@ -400,11 +366,7 @@ class GerenciadorFases:
         ]
 
     def obter_grade_barreiras(self) -> Dict[Celula, Barreira]:
-        """Constrói o dicionário {(col, lin): Barreira} para o algoritmo BFS.
-
-        Returns:
-            Mapa de todas as células atualmente ocupadas por sprites Barreira.
-        """
+        """Constrói o dicionário {(col, lin): Barreira} para o algoritmo BFS."""
         grade: Dict[Celula, Barreira] = {}
         for sprite in self.grupo_barreiras:
             if isinstance(sprite, Barreira):
@@ -416,12 +378,7 @@ class GerenciadorFases:
         modo_alto_contraste: bool,
         fonte_grande: bool = False,
     ) -> None:
-        """Atualiza o visual de todos os tiles ao alternar contraste ou fonte.
-
-        Args:
-            modo_alto_contraste: True para alto contraste; False para padrão.
-            fonte_grande: True para siglas ampliadas no alto contraste.
-        """
+        """Atualiza o visual de todos os tiles ao alternar contraste ou fonte."""
         for sprite in self.grupo_barreiras:
             if isinstance(sprite, Barreira):
                 sprite.atualizar_visual(modo_alto_contraste, fonte_grande)
