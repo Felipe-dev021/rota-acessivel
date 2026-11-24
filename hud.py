@@ -456,14 +456,14 @@ class HUD:
 
         opcoes = [
             "[ENTER / ESPAÇO]  Iniciar Campanha (4 Fases)",
-            "[I]  Instruções e Legenda Visual",
-            f"[C]  Alto Contraste: {'ATIVADO' if modo_alto_contraste else 'DESATIVADO'}   |   [F]  Fonte: {'GRANDE' if self.fonte_grande else 'NORMAL'}",
-            f"[M]  Áudio: {'LIGADO' if audio_ativo else 'MUDO'}   |   [N]  Música: {'LIGADA' if (audio_ativo and musica_ativa) else 'MUDA'}",
-            "[ESC]  Sair do Jogo",
+            "[S]  Mapa Urbano — Selecionar Fase",
+            "[I]  Instruções e Legenda Visual     |     [A]  Créditos e Referências",
+            f"[C]  Contraste: {'ALTO' if modo_alto_contraste else 'NORMAL'}   |   [F]  Fonte: {'GRANDE' if self.fonte_grande else 'NORMAL'}",
+            f"[M]  Áudio: {'ON' if audio_ativo else 'OFF'}   |   [N]  Música: {'ON' if (audio_ativo and musica_ativa) else 'OFF'}   |   [ESC]  Sair",
         ]
-        y = 266
+        y = 258
         for texto in opcoes:
-            caixa = pygame.Rect(150, y, LARGURA - 300, 44)
+            caixa = pygame.Rect(130, y, LARGURA - 260, 44)
             pygame.draw.rect(tela, cores["botao_fundo"], caixa, border_radius=8)
             pygame.draw.rect(tela, cores["botao_borda"], caixa, 2, border_radius=8)
             render = self.fonte_media.render(texto, True, cores["texto_principal"])
@@ -755,3 +755,210 @@ class HUD:
             cores["destaque_e"],
         )
         tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 78)))
+
+    def desenhar_mapa_fases(
+        self,
+        tela: pygame.Surface,
+        lista_fases: List[Dict[str, object]],
+        fases_desbloqueadas: int,
+        registros_salvos: Dict[int, Dict[str, object]],
+        indice_selecionado: int,
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Desenha o estado MAPA com rota urbana estilizada e seleção de fases.
+
+        Args:
+            tela: Superfície principal do jogo.
+            lista_fases: Lista de metadados das 4 fases da campanha.
+            fases_desbloqueadas: Quantidade de fases desbloqueadas (1 a 4).
+            registros_salvos: Histórico salvo por número de fase (selos/status).
+            indice_selecionado: Índice da fase atualmente destacada (0 a 3).
+            modo_alto_contraste: Estado do modo de alto contraste.
+        """
+        cores = self.paleta(modo_alto_contraste)
+        tela.fill(cores["fundo_tela"])
+
+        painel = pygame.Rect(38, 28, LARGURA - 76, ALTURA - 56)
+        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=14)
+        pygame.draw.rect(
+            tela,
+            cores["painel_borda"],
+            painel,
+            BORDA_ALTO_CONTRASTE if modo_alto_contraste else 3,
+            border_radius=14,
+        )
+
+        titulo = self.fonte_subtitulo.render(
+            "MAPA URBANO — SELECIONE UMA ROTA", True, cores["destaque_e"]
+        )
+        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 66)))
+
+        sub = self.fonte_normal.render(
+            "Navegue com Setas / WASD ou teclas [1]–[4] e pressione [ENTER] para iniciar.",
+            True,
+            cores["texto_secundario"],
+        )
+        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 98)))
+
+        # Linha urbana conectando os 4 cartões de fase (layout 2x2)
+        centros = [(265, 225), (695, 225), (265, 425), (695, 425)]
+        pygame.draw.lines(tela, cores["hud_borda"], False, centros, 6)
+
+        for idx, fase in enumerate(lista_fases):
+            numero = int(fase["numero"])
+            desbloqueada = numero <= fases_desbloqueadas
+            selecionada = idx == indice_selecionado
+            registro = registros_salvos.get(numero, {})
+            concluida = bool(registro.get("concluida", False))
+            selos = int(registro.get("melhor_selos", 0))
+            nivel = str(registro.get("melhor_nivel", ""))
+
+            cx, cy = centros[idx]
+            cartao = pygame.Rect(0, 0, 380, 152)
+            cartao.center = (cx, cy)
+
+            cor_fundo = cores["botao_fundo"] if desbloqueada else cores["hud_fundo"]
+            if selecionada:
+                cor_borda = cores["destaque_e"]
+                espessura = 4
+            elif concluida:
+                cor_borda = cores["sucesso_borda"]
+                espessura = 3
+            else:
+                cor_borda = cores["painel_borda"]
+                espessura = 2
+
+            pygame.draw.rect(tela, cor_fundo, cartao, border_radius=10)
+            pygame.draw.rect(tela, cor_borda, cartao, espessura, border_radius=10)
+
+            cab = f"[{numero}] {fase['nome']}"
+            cor_cab = cores["destaque_e"] if selecionada else cores["texto_principal"]
+            tela.blit(self.fonte_media.render(cab, True, cor_cab), (cartao.x + 16, cartao.y + 14))
+
+            perfil = str(fase["perfil_morador"])
+            tela.blit(
+                self.fonte_pequena.render(perfil, True, cores["texto_secundario"]),
+                (cartao.x + 16, cartao.y + 44),
+            )
+
+            info_orc = f"Tempo: {int(float(fase['tempo']))}s   |   Orçamento: {fase['recursos']} rec"
+            tela.blit(
+                self.fonte_pequena.render(info_orc, True, cores["texto_principal"]),
+                (cartao.x + 16, cartao.y + 72),
+            )
+
+            if not desbloqueada:
+                status_txt = "[BLOQUEADA] Conclua a fase anterior"
+                cor_st = cores["erro_borda"]
+            elif concluida:
+                selos_visuais = "★" * selos + "☆" * (3 - selos)
+                status_txt = f"{nivel} ({selos}/3) {selos_visuais}"
+                cor_st = cores["sucesso_borda"]
+            else:
+                status_txt = "[DISPONÍVEL] Pronta para iniciar"
+                cor_st = cores["rota_preview"]
+
+            tela.blit(
+                self.fonte_pequena.render(status_txt, True, cor_st),
+                (cartao.x + 16, cartao.y + 106),
+            )
+
+        rodape = self.fonte_media.render(
+            "[ENTER / ESPAÇO] Jogar Fase Selecionada     |     [ESC / BACKSPACE] Voltar ao Menu",
+            True,
+            cores["destaque_e"],
+        )
+        tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 58)))
+
+    def desenhar_creditos(
+        self,
+        tela: pygame.Surface,
+        modo_alto_contraste: bool,
+    ) -> None:
+        """Desenha a tela CREDITOS com autores, acessibilidade e referências técnicas."""
+        cores = self.paleta(modo_alto_contraste)
+        tela.fill(cores["fundo_tela"])
+
+        painel = pygame.Rect(48, 30, LARGURA - 96, ALTURA - 60)
+        pygame.draw.rect(tela, cores["painel_fundo"], painel, border_radius=14)
+        pygame.draw.rect(
+            tela,
+            cores["painel_borda"],
+            painel,
+            BORDA_ALTO_CONTRASTE if modo_alto_contraste else 3,
+            border_radius=14,
+        )
+
+        titulo = self.fonte_subtitulo.render(
+            "CRÉDITOS E REFERÊNCIAS — ROTA ACESSÍVEL",
+            True,
+            cores["destaque_e"],
+        )
+        tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 68)))
+
+        sub = self.fonte_normal.render(
+            "Serious Game — Engenharia de Software (7º Período) | Tema 07: Acessibilidade e Inclusão",
+            True,
+            cores["texto_secundario"],
+        )
+        tela.blit(sub, sub.get_rect(center=(LARGURA // 2, 102)))
+
+        # Coluna esquerda: Equipe de Desenvolvimento
+        x_esq = 82
+        tela.blit(
+            self.fonte_media.render("EQUIPE DO PROJETO (5 INTEGRANTES)", True, cores["destaque_e"]),
+            (x_esq, 146),
+        )
+        autores = [
+            "• Felipe-dev021 — Arquitetura, Main Loop e Persistência",
+            "• anacgsx — Assets, Barreiras e Trilha Sonora",
+            "• lucas-marins-dev — Jogador, Juice e Acessibilidade",
+            "• GuiMell0 — Algoritmo BFS, Fases e Autonomia",
+            "• Gabriel-dev10 — HUD, Mapa Urbano, Créditos e Docs",
+        ]
+        y = 180
+        for autor in autores:
+            tela.blit(self.fonte_normal.render(autor, True, cores["texto_principal"]), (x_esq, y))
+            y += 30
+
+        # Coluna esquerda inferior: Referências Técnicas
+        tela.blit(
+            self.fonte_media.render("REFERÊNCIAS TÉCNICAS", True, cores["destaque_e"]),
+            (x_esq, 354),
+        )
+        referencias = [
+            "• ABNT NBR 9050:2020 — Acessibilidade a edificações e vias",
+            "• Lei nº 13.146/2015 — Lei Brasileira de Inclusão (LBI)",
+            "• W3C WCAG 2.1 — Diretrizes de Acessibilidade de Conteúdo",
+        ]
+        y_ref = 388
+        for ref in referencias:
+            tela.blit(self.fonte_normal.render(ref, True, cores["texto_principal"]), (x_esq, y_ref))
+            y_ref += 30
+
+        # Coluna direita: Recursos de Acessibilidade no Próprio Jogo
+        x_dir = 548
+        tela.blit(
+            self.fonte_media.render("ACESSIBILIDADE NO JOGO", True, cores["destaque_e"]),
+            (x_dir, 146),
+        )
+        acess = [
+            "• [C] Modo Alto Contraste com siglas",
+            "• [F] Alternância de Fonte (Normal/Grande)",
+            "• [M] Silenciar áudio completo",
+            "• [N] Silenciar apenas música de fundo",
+            "• [P] Pausa sem limite de tempo",
+            "• Sem flashes fortes ou tremor de tela",
+            "• Nenhum alerta depende só de som ou cor",
+        ]
+        y_ac = 180
+        for item in acess:
+            tela.blit(self.fonte_normal.render(item, True, cores["texto_principal"]), (x_dir, y_ac))
+            y_ac += 30
+
+        rodape = self.fonte_media.render(
+            "[ESC / BACKSPACE / ENTER]  Voltar ao Menu Principal",
+            True,
+            cores["destaque_e"],
+        )
+        tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 60)))

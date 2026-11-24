@@ -22,9 +22,11 @@ from config import (
     AUDIO_VOLUME_MUSICA,
     DT_MAXIMO,
     DURACAO_FEEDBACK,
+    ESTADO_CREDITOS,
     ESTADO_FIM,
     ESTADO_INSTRUCOES,
     ESTADO_JOGANDO,
+    ESTADO_MAPA,
     ESTADO_MENU,
     ESTADO_PAUSA,
     ESTADO_TRANSICAO,
@@ -88,6 +90,7 @@ class JogoRotaAcessivel:
         self.grupo_desenho: pygame.sprite.Group = pygame.sprite.Group()
         self._reconstruir_grupo_desenho()
         self.ultimo_resumo_fase: Dict[str, object] = {}
+        self.indice_mapa_selecionado: int = 0
 
     def _carregar_sons(self) -> Dict[str, Optional[pygame.mixer.Sound]]:
         """Carrega os efeitos WAV via caminho_arquivo() com proteção contra falhas.
@@ -216,6 +219,25 @@ class JogoRotaAcessivel:
         self._salvar_preferencias()
         self._tocar_som("clique")
 
+    def _iniciar_fase_especifica(self, indice: int) -> None:
+        """Carrega uma fase desbloqueada selecionada no Mapa Urbano.
+
+        Args:
+            indice: Índice baseado em zero da fase escolhida (0 a 3).
+        """
+        if indice + 1 > self.save.fases_desbloqueadas():
+            self._tocar_som("erro")
+            return
+        self.vitoria_campanha = False
+        self.fases.carregar_fase(indice, self.modo_alto_contraste, self.fonte_grande)
+        self._sincronizar_fase_atual()
+        self.estado = ESTADO_JOGANDO
+        self.hud.definir_feedback(
+            str(self.fases.metadados_atual["descricao"]),
+            "OK",
+            DURACAO_FEEDBACK,
+        )
+
     def _iniciar_nova_campanha(self) -> None:
         """Inicia uma nova campanha a partir da Fase 1."""
         self.vitoria_campanha = False
@@ -342,6 +364,10 @@ class JogoRotaAcessivel:
                 self._evento_menu(tecla)
             elif self.estado == ESTADO_INSTRUCOES:
                 self._evento_instrucoes(tecla)
+            elif self.estado == ESTADO_MAPA:
+                self._evento_mapa(tecla)
+            elif self.estado == ESTADO_CREDITOS:
+                self._evento_creditos(tecla)
             elif self.estado == ESTADO_JOGANDO:
                 self._evento_jogando(tecla)
             elif self.estado == ESTADO_PAUSA:
@@ -356,11 +382,54 @@ class JogoRotaAcessivel:
         if tecla in (pygame.K_RETURN, pygame.K_SPACE):
             self._tocar_som("clique")
             self._iniciar_nova_campanha()
+        elif tecla == pygame.K_s:
+            self._tocar_som("clique")
+            self.indice_mapa_selecionado = min(
+                self.save.fases_desbloqueadas() - 1, self.fases.total_fases - 1
+            )
+            self.estado = ESTADO_MAPA
         elif tecla == pygame.K_i:
             self._tocar_som("clique")
             self.estado = ESTADO_INSTRUCOES
+        elif tecla == pygame.K_a:
+            self._tocar_som("clique")
+            self.estado = ESTADO_CREDITOS
         elif tecla == pygame.K_ESCAPE:
             self.executando = False
+
+    def _evento_mapa(self, tecla: int) -> None:
+        """Trata navegação por teclado (Setas/WASD ou 1-4) no estado MAPA."""
+        total = self.fases.total_fases
+        if tecla in (pygame.K_RIGHT, pygame.K_d):
+            self.indice_mapa_selecionado = (self.indice_mapa_selecionado + 1) % total
+            self._tocar_som("clique")
+        elif tecla in (pygame.K_LEFT, pygame.K_a):
+            self.indice_mapa_selecionado = (self.indice_mapa_selecionado - 1) % total
+            self._tocar_som("clique")
+        elif tecla in (pygame.K_DOWN, pygame.K_s):
+            self.indice_mapa_selecionado = (self.indice_mapa_selecionado + 2) % total
+            self._tocar_som("clique")
+        elif tecla in (pygame.K_UP, pygame.K_w):
+            self.indice_mapa_selecionado = (self.indice_mapa_selecionado - 2) % total
+            self._tocar_som("clique")
+        elif tecla in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
+            escolhida = tecla - pygame.K_1
+            if escolhida < total:
+                self.indice_mapa_selecionado = escolhida
+                self._tocar_som("clique")
+                self._iniciar_fase_especifica(escolhida)
+        elif tecla in (pygame.K_RETURN, pygame.K_SPACE):
+            self._tocar_som("clique")
+            self._iniciar_fase_especifica(self.indice_mapa_selecionado)
+        elif tecla in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            self._tocar_som("clique")
+            self.estado = ESTADO_MENU
+
+    def _evento_creditos(self, tecla: int) -> None:
+        """Trata comandos de teclado no estado CREDITOS."""
+        if tecla in (pygame.K_ESCAPE, pygame.K_BACKSPACE, pygame.K_RETURN, pygame.K_SPACE):
+            self._tocar_som("clique")
+            self.estado = ESTADO_MENU
 
     def _evento_instrucoes(self, tecla: int) -> None:
         """Trata comandos de teclado no estado INSTRUCOES."""
@@ -551,6 +620,21 @@ class JogoRotaAcessivel:
             )
         elif self.estado == ESTADO_INSTRUCOES:
             self.hud.desenhar_instrucoes(self.tela, self.modo_alto_contraste)
+        elif self.estado == ESTADO_MAPA:
+            registros = {
+                n: self.save.obter_registro_fase(n)
+                for n in range(1, self.fases.total_fases + 1)
+            }
+            self.hud.desenhar_mapa_fases(
+                self.tela,
+                self.fases.obter_lista_fases(),
+                self.save.fases_desbloqueadas(),
+                registros,
+                self.indice_mapa_selecionado,
+                self.modo_alto_contraste,
+            )
+        elif self.estado == ESTADO_CREDITOS:
+            self.hud.desenhar_creditos(self.tela, self.modo_alto_contraste)
         elif self.estado == ESTADO_JOGANDO:
             self._desenhar_cena_jogo()
         elif self.estado == ESTADO_PAUSA:
