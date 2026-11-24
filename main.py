@@ -82,9 +82,11 @@ class JogoRotaAcessivel:
         self.morador: Morador = Morador(
             self.fases.inicio_morador[0],
             self.fases.inicio_morador[1],
+            str(self.fases.metadados_atual["perfil_id"]),
             self.modo_alto_contraste,
             self.fonte_grande,
         )
+        self.retrato_morador_atual: pygame.Surface = self.morador.obter_retrato(40)
 
         # Único grupo que executa update(dt) e draw(tela) a cada frame
         self.grupo_desenho: pygame.sprite.Group = pygame.sprite.Group()
@@ -162,10 +164,12 @@ class JogoRotaAcessivel:
         self.grupo_desenho.add(self.morador, self.jogador)
 
     def _sincronizar_fase_atual(self) -> None:
-        """Vincula entidades e grupos de colisão à fase recém-carregada."""
+        """Vincula entidades, perfil do Morador e grupos de colisão à fase atual."""
         self.jogador.definir_grupo_solidos(self.fases.grupo_solidos)
         self.jogador.reposicionar(*self.fases.inicio_jogador)
         self.jogador.movimento_habilitado = True
+        self.morador.definir_perfil(str(self.fases.metadados_atual["perfil_id"]))
+        self.retrato_morador_atual = self.morador.obter_retrato(40)
         self.morador.cancelar_teste()
         self.morador.reposicionar(*self.fases.inicio_morador)
         self._reconstruir_grupo_desenho()
@@ -336,12 +340,80 @@ class JogoRotaAcessivel:
         self._tocar_som("erro")
         self.estado = ESTADO_FIM
 
+    def _tratar_clique_mouse(self, pos_mouse: tuple[int, int]) -> None:
+        """Processa cliques do botão esquerdo do mouse em menus, mapa e jogabilidade."""
+        if self.estado == ESTADO_JOGANDO:
+            if self.hud.botao_testar_hud.collidepoint(pos_mouse):
+                self._iniciar_validacao_rota()
+                return
+            barreira_proxima = self.jogador.obter_barreira_proxima(
+                self.fases.grupo_interativos
+            )
+            if barreira_proxima is not None and barreira_proxima.rect.collidepoint(pos_mouse):
+                self._aplicar_intervencao()
+            return
+
+        acao = self.hud.obter_acao_clique(pos_mouse)
+        if acao is None:
+            return
+
+        if acao == "jogar":
+            self._tocar_som("clique")
+            self._iniciar_nova_campanha()
+        elif acao == "mapa":
+            self._tocar_som("clique")
+            self.indice_mapa_selecionado = min(
+                self.save.fases_desbloqueadas() - 1, self.fases.total_fases - 1
+            )
+            self.estado = ESTADO_MAPA
+        elif acao == "instrucoes":
+            self._tocar_som("clique")
+            self.estado = ESTADO_INSTRUCOES
+        elif acao == "creditos":
+            self._tocar_som("clique")
+            self.estado = ESTADO_CREDITOS
+        elif acao == "contraste":
+            self._alternar_contraste()
+        elif acao == "fonte":
+            self._alternar_fonte()
+        elif acao == "audio":
+            self._alternar_audio()
+        elif acao == "musica":
+            self._alternar_musica()
+        elif acao == "continuar":
+            self._tocar_som("clique")
+            self.estado = ESTADO_JOGANDO
+        elif acao == "reiniciar":
+            if self.estado == ESTADO_FIM and self.vitoria_campanha:
+                self._tocar_som("clique")
+                self._iniciar_nova_campanha()
+            else:
+                self._reiniciar_fase_atual()
+        elif acao == "menu":
+            self._tocar_som("clique")
+            self.estado = ESTADO_MENU
+        elif acao == "avancar":
+            self._evento_transicao(pygame.K_RETURN)
+        elif acao == "jogar_selecionada":
+            self._tocar_som("clique")
+            self._iniciar_fase_especifica(self.indice_mapa_selecionado)
+        elif acao.startswith("fase_"):
+            indice = int(acao.split("_")[1])
+            self.indice_mapa_selecionado = indice
+            self._iniciar_fase_especifica(indice)
+        elif acao == "sair":
+            self.executando = False
+
     def _processar_eventos(self) -> None:
-        """Processa os eventos do Pygame conforme o estado atual."""
+        """Processa eventos de teclado, mouse e fechamento de janela."""
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
                 self.executando = False
                 return
+
+            if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+                self._tratar_clique_mouse(evento.pos)
+                continue
 
             if evento.type != pygame.KEYDOWN:
                 continue
@@ -569,8 +641,11 @@ class JogoRotaAcessivel:
                 self._tratar_fim_por_tempo()
 
     def _desenhar_cena_jogo(self) -> None:
-        """Desenha a calçada, rastro do Morador, sprites, partículas e HUD."""
-        self.hud.desenhar_grade_calcada(self.tela, self.modo_alto_contraste)
+        """Desenha o cenário em cache, rastro do Morador, sprites, partículas e HUD."""
+        meta = self.fases.metadados_atual
+        self.hud.desenhar_grade_calcada(
+            self.tela, int(meta["numero"]), self.modo_alto_contraste
+        )
         self.hud.desenhar_rastro_morador(
             self.tela,
             self.morador.celulas_percorridas,
@@ -582,6 +657,7 @@ class JogoRotaAcessivel:
             self.tela,
             self.fases.inicio_morador,
             self.fases.destino,
+            str(meta["local_destino"]),
             self.modo_alto_contraste,
         )
         self.particulas.desenhar(self.tela)
@@ -594,20 +670,25 @@ class JogoRotaAcessivel:
                 self.tela, barreira_proxima, self.modo_alto_contraste
             )
 
-        meta = self.fases.metadados_atual
         self.hud.desenhar_barra_superior(
             self.tela,
             int(meta["numero"]),
             self.fases.total_fases,
             str(meta["nome"]),
+            str(meta["nome_morador"]),
+            self.retrato_morador_atual,
             self.fases.tempo_restante,
+            float(meta["tempo"]),
             self.fases.recursos,
+            self.fases.recursos_iniciais,
             self.modo_alto_contraste,
             self.audio_ativo,
             self.morador.em_movimento,
             self.musica_ativa,
         )
-        self.hud.desenhar_feedback_inferior(self.tela, self.modo_alto_contraste)
+        self.hud.desenhar_feedback_inferior(
+            self.tela, self.retrato_morador_atual, self.modo_alto_contraste
+        )
 
     def _desenhar(self) -> None:
         """Desenha a tela correspondente ao estado ativo da máquina de estados."""
