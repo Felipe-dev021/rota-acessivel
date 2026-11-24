@@ -1,9 +1,9 @@
-"""Gerenciador das 4 fases progressivas, mapas 20x11 coerentes e autonomia.
+"""Gerenciador das 4 fases ambientadas em Maricá/RJ, mapas 20x11 e autonomia.
 
-Cada fase apresenta um morador com perfil e sprite próprios, coerentes com as
-barreiras daquele cenário urbano (Clara e Lucas cadeirantes; Sofia moradora
-surda a pé; Mateus com baixa visão e bengala branca), garantindo aprendizado
-real sem contradições.
+Cada fase representa um local real de Maricá/RJ (Orla de Araçatiba, Escola
+Municipal do Centro, Praça Orlando de Barros Pimentel e Caminho ao Posto de
+Saúde de Itaipuaçu) com calçadas amplas, bordas cênicas livres e moradores
+100% coerentes com as barreiras do cenário.
 """
 
 from typing import Dict, List, Tuple
@@ -46,18 +46,18 @@ Celula = Tuple[int, int]
 
 
 class GerenciadorFases:
-    """Controla as 4 fases progressivas, grupos de colisão e avaliação qualitativa."""
+    """Controla as 4 fases de Maricá/RJ, grupos de colisão e avaliação qualitativa."""
 
-    # Legenda dos mapas 20x11:
-    # '.' = faixa livre     | 'I' = início do Morador | 'J' = início de Alex
-    # 'F' = destino         | 'P' = poste fixo        | 'L' = lixeira (0 rec)
+    # Legenda dos mapas 20x11 (linhas 0 e 10 são faixas cênicas: lagoa/jardim e rua/Vermelhinho):
+    # '.' = calçada livre   | 'I' = início do Morador | 'J' = início de Alex
+    # 'F' = destino         | 'P' = canteiro/poste    | 'L' = lixeira (0 rec)
     # 'D' = degrau (1 rec)  | 'B' = buraco (1 rec)    | 'T' = sem piso tátil (1)
     # 'S' = aviso sonoro (1)
     FASES_CAMPANHA: List[Dict[str, object]] = [
         {
             "numero": 1,
-            "nome": "Calçada do Bairro",
-            "local_destino": "PONTO DE ÔNIBUS",
+            "nome": "Orla de Araçatiba",
+            "local_destino": "PONTO VERMELHINHO",
             "perfil_id": PERFIL_CADEIRANTE,
             "nome_morador": "Clara",
             "perfil_morador": "Clara — Moradora em cadeira de rodas",
@@ -65,31 +65,31 @@ class GerenciadorFases:
             "recursos": RECURSOS_FASE_1,
             "custo_otimo": CUSTO_OTIMO_FASE_1,
             "descricao": (
-                "Clara: 'As lixeiras no meio da calçada e o degrau sem rampa "
-                "bloqueiam meu caminho até o ponto!'"
+                "Clara (Araçatiba): 'Preciso pegar o Vermelhinho, mas lixeiras "
+                "e um degrau sem rampa bloqueiam o calçadão da lagoa!'"
             ),
             "aprendizado": (
-                "ABNT NBR 9050 — Faixa Livre: toda calçada deve manter faixa "
-                "livre contínua de no mínimo 1,20 m sem mobiliário solto e "
-                "com desníveis rebaixados para circulação autônoma."
+                "ABNT NBR 9050 — Faixa Livre na Orla: toda calçada precisa de "
+                "faixa livre contínua de no mínimo 1,20 m, sem lixeiras soltas "
+                "e com rampa acessível para garantir autonomia até o transporte."
             ),
             "mapa": [
-                "PPPPPPPPPPPPPPPPPPPP",
-                "P.....P.....P...P..P",
-                "P.....P.....P...P..P",
-                "P.....P.....P...P..P",
-                "P.....L.....P...P..P",
+                "....................",
+                "......P.....P...P...",
+                "......P.....P...P...",
+                "......P.....P...P...",
+                "......L.....P...P...",
                 "I..J..L.....D...L..F",
-                "P.....P.....P...L..P",
-                "P.....P.....P...P..P",
-                "P.....P.....P...P..P",
-                "P.....P.....P...P..P",
-                "PPPPPPPPPPPPPPPPPPPP",
+                "......P.....P...L...",
+                "......P.....P...P...",
+                "......P.....P...P...",
+                "......P.....P...P...",
+                "....................",
             ],
         },
         {
             "numero": 2,
-            "nome": "Entrada da Escola",
+            "nome": "Escola no Centro de Maricá",
             "local_destino": "ESCOLA MUNICIPAL",
             "perfil_id": PERFIL_CADEIRANTE,
             "nome_morador": "Lucas",
@@ -98,32 +98,32 @@ class GerenciadorFases:
             "recursos": RECURSOS_FASE_2,
             "custo_otimo": CUSTO_OTIMO_FASE_2,
             "descricao": (
-                "Lucas: 'Os postes estreitam o caminho e os degraus com "
-                "buraco me impedem de entrar na escola sozinho!'"
+                "Lucas (Centro): 'Os canteiros estreitam a calçada e os degraus "
+                "com buraco impedem minha entrada na escola!'"
             ),
             "aprendizado": (
-                "ABNT NBR 9050 — Rota Acessível Contínua: postes pertencem à "
-                "faixa de serviço. Em passagens estreitas, qualquer degrau ou "
-                "buraco sem correção bloqueia o acesso à educação."
+                "ABNT NBR 9050 — Rota Acessível Contínua: mobiliário fixo deve "
+                "ficar na faixa de serviço. Em gargalos estreitos, qualquer "
+                "degrau ou buraco sem correção bloqueia o acesso à educação."
             ),
             "mapa": [
-                "PPPPPPPPPPPPPPPPPPPP",
-                "P....P..P...P..P.P.P",
-                "P....L..P...P..P.P.P",
-                "P....P..PP..P..P.P.P",
-                "I.J..P..P...D..P.P.P",
-                "P....P..P...P..P.B.F",
-                "P....P..L...P..D.P.P",
-                "P....P..P...P..P.P.P",
-                "P....P..P...P..P.P.P",
-                "P....P..P...P..P.P.P",
-                "PPPPPPPPPPPPPPPPPPPP",
+                "....................",
+                ".....P..P...P..P.P..",
+                ".....L..P...P..P.P..",
+                ".....L..P...P..P.P..",
+                "I.J..P..P...D..P.P..",
+                ".....P..P...P..P.B.F",
+                ".....P..L...P..D.P..",
+                ".....P..L...P..P.P..",
+                ".....P..P...P..P.P..",
+                ".....P..P...P..P.P..",
+                "....................",
             ],
         },
         {
             "numero": 3,
-            "nome": "Praça Comunitária",
-            "local_destino": "PALCO DO EVENTO",
+            "nome": "Praça Orlando de Barros Pimentel",
+            "local_destino": "PALCO DA PRAÇA",
             "perfil_id": PERFIL_SURDO,
             "nome_morador": "Sofia",
             "perfil_morador": "Sofia — Moradora surda (comunicação visual)",
@@ -131,8 +131,8 @@ class GerenciadorFases:
             "recursos": RECURSOS_FASE_3,
             "custo_otimo": CUSTO_OTIMO_FASE_3,
             "descricao": (
-                "Sofia: 'Os avisos do evento na praça são só por alto-falante! "
-                "Instale painéis visuais para eu me orientar com autonomia.'"
+                "Sofia (Praça Central): 'Os avisos do evento são só por "
+                "alto-falante! Instale painéis visuais para eu me orientar.'"
             ),
             "aprendizado": (
                 "Lei nº 13.146/2015 (LBI) — Acessibilidade Comunicacional: "
@@ -140,22 +140,22 @@ class GerenciadorFases:
                 "informação urbana essencial precisa combinar som e painel visual."
             ),
             "mapa": [
-                "PPPPPPPPPPPPPPPPPPPP",
-                "P....P...P...P..P.PP",
-                "P....L...P...P..P.PP",
-                "P....P...P...P..P.PP",
-                "I.J..P...P...S..P.PP",
-                "P....P...P...P..S.LF",
-                "P....P...P...P..P.PP",
-                "P....P...S...P..P.PP",
-                "P....P...P...P..P.PP",
-                "P....P...P...P..P.PP",
-                "PPPPPPPPPPPPPPPPPPPP",
+                "....................",
+                ".....P...P...P..P...",
+                ".....L...P...P..P...",
+                ".....L...P...P..P...",
+                "I.J..P...P...S..P...",
+                ".....P...P...P..S.LF",
+                ".....P...P...P..P...",
+                ".....P...S...P..P...",
+                ".....P...P...P..P...",
+                ".....P...P...P..P...",
+                "....................",
             ],
         },
         {
             "numero": 4,
-            "nome": "Caminho ao Posto de Saúde",
+            "nome": "Posto de Saúde — Itaipuaçu",
             "local_destino": "POSTO DE SAÚDE",
             "perfil_id": PERFIL_BAIXA_VISAO,
             "nome_morador": "Mateus",
@@ -164,26 +164,26 @@ class GerenciadorFases:
             "recursos": RECURSOS_FASE_4,
             "custo_otimo": CUSTO_OTIMO_FASE_4,
             "descricao": (
-                "Mateus: 'Preciso de piso tátil e calçada sem buracos! "
-                "Orçamento contado (5 rec): cheque o corredor superior antes!'"
+                "Mateus (Itaipuaçu): 'Preciso de piso tátil e piso sem buracos! "
+                "Orçamento contado (5 rec): cheque o corredor de cima antes!'"
             ),
             "aprendizado": (
                 "ABNT NBR 9050 — Orientação Tátil e Planejamento: piso tátil "
-                "direcional e pavimento regular garantem autonomia a pessoas "
-                "cegas ou com baixa visão; planejar evita desperdiçar recursos."
+                "direcional e pavimento nivelado garantem autonomia com bengala "
+                "branca; diagnosticar a rota evita gastar orçamento em becos."
             ),
             "mapa": [
-                "PPPPPPPPPPPPPPPPPPPP",
-                "P....P....P....P.P.P",
-                "P....T....B....P.P.P",
-                "P....P....P....P.P.P",
-                "P..PPPPPPPPPPPPP.P.P",
+                "....................",
+                ".....P....P....P.P..",
+                ".....T....B....P.P..",
+                ".....P....P....P.P..",
+                "...PPPPPPPPPPPPP.P..",
                 "I.JL..P..P..P..P.T.F",
-                "P..P..T..P..T..P.P.P",
-                "P..P..P..B..P..B.P.P",
-                "P..P..P..P..P..P.P.P",
-                "P..P..P..P..P..P.P.P",
-                "PPPPPPPPPPPPPPPPPPPP",
+                "...P..T..P..T..P.P..",
+                "...P..P..B..P..B.P..",
+                "...P..P..P..P..P.P..",
+                "...P..P..P..P..P.P..",
+                "....................",
             ],
         },
     ]
@@ -353,7 +353,7 @@ class GerenciadorFases:
         return False
 
     def obter_lista_fases(self) -> List[Dict[str, object]]:
-        """Retorna resumo das fases da campanha para seleção no Mapa Urbano."""
+        """Retorna resumo das fases da campanha para seleção no Mapa de Maricá."""
         return [
             {
                 "numero": int(fase["numero"]),

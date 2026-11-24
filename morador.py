@@ -153,8 +153,8 @@ class Morador(pygame.sprite.Sprite):
         self.rect.topleft = (round(self.pos_x), round(self.pos_y))
 
     def _dentro_grade(self, coluna: int, linha: int) -> bool:
-        """Verifica se a célula (coluna, linha) pertence à grade 20x11."""
-        return 0 <= coluna < COLS and 0 <= linha < ROWS
+        """Verifica se a célula (coluna, linha) está na faixa jogável da calçada (linhas 1 a 9)."""
+        return 0 <= coluna < COLS and 1 <= linha < ROWS - 1
 
     def _eh_transitavel(self, celula: Celula, grade_barreiras: GradeBarreiras) -> bool:
         """Retorna True se a célula estiver livre para a passagem do Morador."""
