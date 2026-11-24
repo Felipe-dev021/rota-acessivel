@@ -9,9 +9,6 @@ resolução de caminhos compatíveis com Python e PyInstaller residem aqui.
 import os
 import sys
 
-# =============================================================================
-# CAMINHOS COMPATÍVEIS COM EXECUÇÃO NORMAL E PYINSTALLER
-# =============================================================================
 if getattr(sys, "frozen", False):
     PASTA_BASE = getattr(
         sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable))
@@ -48,50 +45,37 @@ def caminho_save(nome_arquivo: str) -> str:
     return os.path.join(PASTA_EXECUTAVEL, nome_arquivo)
 
 
-# =============================================================================
-# JANELA, GRADE E TAXA DE QUADROS
-# =============================================================================
 TITULO_JOGO = "Rota Acessível — Maricá/RJ (Acessibilidade e Inclusão)"
 TILE = 48
+ALTURA_SPRITE_25D = 64
 COLS = 20
 ROWS = 11
 HUD_ALTURA = 96
-LARGURA = COLS * TILE              # 960 px
-ALTURA = HUD_ALTURA + ROWS * TILE  # 624 px
+LARGURA = COLS * TILE
+ALTURA = HUD_ALTURA + ROWS * TILE
 FPS = 60
-DT_MAXIMO = 0.05                   # teto de delta time para estabilidade física
+DT_MAXIMO = 0.05
 
-# =============================================================================
-# FÍSICA ÁGIL, SPRINT E INTERAÇÃO
-# =============================================================================
-VELOCIDADE_JOGADOR = 275.0         # pixels por segundo (resposta imediata)
-VELOCIDADE_SPRINT = 380.0          # pixels por segundo segurando SHIFT
-CORNER_NUDGE_MAX = 18              # deslizamento automático em quinas (px)
-VELOCIDADE_MORADOR = 230.0         # pixels por segundo
-RAIO_INTERACAO = 76.0              # raio confortável para destaque [E]
-HITBOX_JOGADOR_MARGEM = 12         # hitbox 24x24 dentro de 48x48 (zero travamento)
+VELOCIDADE_JOGADOR = 335.0
+VELOCIDADE_SPRINT = 465.0
+CORNER_NUDGE_MAX = 22
+VELOCIDADE_MORADOR = 245.0
+RAIO_INTERACAO = 84.0
+HITBOX_JOGADOR_LARGURA = 18
+HITBOX_JOGADOR_ALTURA = 14
 
-# =============================================================================
-# REGRAS DE TEMPO, PENALIDADE E FEEDBACK
-# =============================================================================
-PENALIDADE_ERRO = 5.0              # segundos descontados ao encontrar bloqueio
-TEMPO_ALERTA_CRITICO = 15.0        # segundos para alerta visual no cronômetro
-DURACAO_FEEDBACK = 6.5             # segundos de exibição da barra educativa
-ALTURA_FEEDBACK = 64               # altura da faixa educativa inferior
-DURACAO_POPUP = 1.25               # segundos dos textos flutuantes de ação
+PENALIDADE_ERRO = 5.0
+TEMPO_ALERTA_CRITICO = 15.0
+DURACAO_FEEDBACK = 6.5
+ALTURA_FEEDBACK = 64
+DURACAO_POPUP = 1.25
 
-# =============================================================================
-# CUSTOS DAS INTERVENÇÕES DE ACESSIBILIDADE
-# =============================================================================
 CUSTO_LIXEIRA = 0
 CUSTO_DEGRAU = 1
 CUSTO_BURACO = 1
 CUSTO_SEM_PISO_TATIL = 1
 CUSTO_AVISO_SONORO = 1
 
-# =============================================================================
-# ORÇAMENTO, TEMPO E CLASSIFICAÇÃO QUALITATIVA DE AUTONOMIA (4 FASES MARICÁ/RJ)
-# =============================================================================
 TEMPO_FASE_1 = 90.0
 RECURSOS_FASE_1 = 3
 CUSTO_OTIMO_FASE_1 = 1
@@ -113,28 +97,20 @@ NIVEL_AUTONOMIA_EFICIENTE = "Rota Eficiente"
 NIVEL_AUTONOMIA_SEGURA = "Rota Segura"
 NIVEL_AUTONOMIA_BLOQUEADA = "Rota Bloqueada"
 
-# =============================================================================
-# PERFIS DE MORADORES (COERÊNCIA TOTAL ENTRE PERSONAGEM E BARREIRAS DA FASE)
-# =============================================================================
 PERFIL_CADEIRANTE = "cadeirante"
 PERFIL_SURDO = "surdo"
 PERFIL_BAIXA_VISAO = "baixa_visao"
 
-# =============================================================================
-# ESTADOS DA MÁQUINA DE ESTADOS
-# =============================================================================
 ESTADO_MENU = "MENU"
 ESTADO_INSTRUCOES = "INSTRUCOES"
 ESTADO_MAPA = "MAPA"
+ESTADO_BRIEFING = "BRIEFING"
 ESTADO_JOGANDO = "JOGANDO"
 ESTADO_PAUSA = "PAUSA"
 ESTADO_TRANSICAO = "TRANSICAO"
 ESTADO_FIM = "FIM"
 ESTADO_CREDITOS = "CREDITOS"
 
-# =============================================================================
-# TIPOS DE ELEMENTOS E BARREIRAS DO CENÁRIO
-# =============================================================================
 TIPO_LIXEIRA = "lixeira"
 TIPO_DEGRAU = "degrau"
 TIPO_BURACO = "buraco"
@@ -147,9 +123,6 @@ TIPO_PISO_TATIL = "piso_tatil"
 TIPO_PAINEL_VISUAL = "painel_visual"
 TIPO_DESTINO = "destino"
 
-# =============================================================================
-# NOMES DOS ARQUIVOS DE ASSETS (PASTA data/)
-# =============================================================================
 ARQUIVO_IMG_PLAYER = "player.png"
 ARQUIVO_IMG_MORADOR = "morador.png"
 ARQUIVO_IMG_MORADOR_SURDO = "morador_surdo.png"
@@ -174,16 +147,10 @@ ARQUIVO_SOM_CLIQUE = "clique.wav"
 ARQUIVO_MUSICA_FUNDO = "musica.wav"
 ARQUIVO_SAVE_PROGRESSO = "progresso.json"
 
-# =============================================================================
-# PARÂMETROS DE ÁUDIO
-# =============================================================================
 AUDIO_SAMPLE_RATE = 22050
 AUDIO_VOLUME_EFEITOS = 0.45
 AUDIO_VOLUME_MUSICA = 0.20
 
-# =============================================================================
-# ESCALAS DE FONTE (ACESSIBILIDADE: TECLA [F] NORMAL / GRANDE)
-# =============================================================================
 FONTE_FAMILIA = "segoeui"
 
 FONTES_NORMAL = {
@@ -206,35 +173,32 @@ FONTES_GRANDE = {
 
 BORDA_ALTO_CONTRASTE = 4
 
-# =============================================================================
-# PALETAS DE CORES (IDENTIDADE ENSOLARADA DE MARICÁ/RJ E ALTO CONTRASTE)
-# =============================================================================
 CORES_NORMAL = {
-    "fundo_tela": (246, 239, 226),       # areia clara ensolarada de Maricá
-    "lagoa_azul": (42, 157, 204),        # Lagoa de Araçatiba / Itaipuaçu
-    "lagoa_brilho": (118, 208, 238),     # reflexo da água
-    "ciclovia_vermelha": (196, 54, 54),  # ciclovia / identidade Vermelhinho
-    "vermelhinho": (214, 40, 40),        # ônibus Tarifa Zero de Maricá
-    "faixa_servico": (92, 158, 86),      # gramado / restinga verde
-    "asfalto": (74, 82, 94),             # via asfaltada
-    "faixa_rua": (248, 244, 234),        # faixa de pedestres
-    "calcada_clara": (238, 231, 216),    # pedra portuguesa / calçadão claro
-    "calcada_escura": (228, 220, 204),   # alternância sutil das lajotas
-    "meio_fio": (182, 172, 154),         # meio-fio
-    "grade_linha": (212, 204, 188),      # junta suave
-    "hud_fundo": (26, 46, 68),           # azul-marinho litorâneo
-    "hud_cartao": (38, 64, 92),          # cartões internos do HUD
-    "hud_borda": (220, 56, 56),          # filete vermelho Maricá
+    "fundo_tela": (246, 239, 226),
+    "lagoa_azul": (42, 157, 204),
+    "lagoa_brilho": (118, 208, 238),
+    "ciclovia_vermelha": (196, 54, 54),
+    "vermelhinho": (214, 40, 40),
+    "faixa_servico": (92, 158, 86),
+    "asfalto": (74, 82, 94),
+    "faixa_rua": (248, 244, 234),
+    "calcada_clara": (238, 231, 216),
+    "calcada_escura": (228, 220, 204),
+    "meio_fio": (182, 172, 154),
+    "grade_linha": (212, 204, 188),
+    "hud_fundo": (26, 46, 68),
+    "hud_cartao": (38, 64, 92),
+    "hud_borda": (220, 56, 56),
     "texto_principal": (250, 248, 244),
     "texto_escuro": (36, 32, 28),
     "texto_secundario": (205, 220, 234),
     "texto_suave_escuro": (102, 90, 78),
     "destaque_e": (255, 202, 40),
     "destaque_e_texto": (30, 24, 18),
-    "sucesso_fundo": (22, 108, 72),
+    "sucesso_fundo": (22, 122, 86),
     "sucesso_borda": (74, 222, 128),
-    "erro_fundo": (162, 34, 34),
-    "erro_borda": (252, 165, 165),
+    "erro_fundo": (184, 72, 54),
+    "erro_borda": (253, 186, 116),
     "aviso": (251, 191, 36),
     "botao_fundo": (255, 252, 246),
     "botao_hover": (254, 238, 212),
@@ -246,10 +210,6 @@ CORES_NORMAL = {
     "partida_marcador": (32, 98, 214),
     "destino_marcador": (204, 44, 44),
     "overlay": (20, 28, 38, 188),
-    "fase_1_acento": (42, 157, 204),     # Araçatiba (azul lagoa)
-    "fase_2_acento": (214, 124, 52),     # Centro/Escola (terracota)
-    "fase_3_acento": (244, 196, 48),     # Praça Orlando (ipê amarelo)
-    "fase_4_acento": (214, 48, 48),      # Posto de Saúde (vermelho saúde)
     "tile_lixeira": (46, 134, 95),
     "tile_degrau": (186, 104, 52),
     "tile_buraco": (82, 70, 74),
@@ -302,10 +262,6 @@ CORES_ALTO_CONTRASTE = {
     "partida_marcador": (0, 200, 255),
     "destino_marcador": (255, 255, 0),
     "overlay": (0, 0, 0, 224),
-    "fase_1_acento": (0, 255, 255),
-    "fase_2_acento": (255, 165, 0),
-    "fase_3_acento": (255, 255, 0),
-    "fase_4_acento": (255, 80, 80),
     "tile_lixeira": (0, 175, 255),
     "tile_degrau": (255, 128, 0),
     "tile_buraco": (235, 0, 180),

@@ -22,6 +22,7 @@ from config import (
     AUDIO_VOLUME_MUSICA,
     DT_MAXIMO,
     DURACAO_FEEDBACK,
+    ESTADO_BRIEFING,
     ESTADO_CREDITOS,
     ESTADO_FIM,
     ESTADO_INSTRUCOES,
@@ -31,8 +32,17 @@ from config import (
     ESTADO_PAUSA,
     ESTADO_TRANSICAO,
     FPS,
+    HUD_ALTURA,
     LARGURA,
     PENALIDADE_ERRO,
+    TILE,
+    TIPO_BURACO,
+    TIPO_DEGRAU,
+    TIPO_DESTINO,
+    TIPO_PISO_OK,
+    TIPO_PISO_TATIL,
+    TIPO_RAMPA,
+    TIPO_SEM_PISO_TATIL,
     TITULO_JOGO,
     caminho_arquivo,
 )
@@ -50,7 +60,12 @@ class JogoRotaAcessivel:
     def __init__(self) -> None:
         """Inicializa pygame, janela, áudio seguro, entidades e grupos."""
         pygame.init()
-        self.tela: pygame.Surface = pygame.display.set_mode((LARGURA, ALTURA))
+        try:
+            self.tela: pygame.Surface = pygame.display.set_mode(
+                (LARGURA, ALTURA), pygame.SCALED, vsync=1
+            )
+        except pygame.error:
+            self.tela = pygame.display.set_mode((LARGURA, ALTURA))
         pygame.display.set_caption(TITULO_JOGO)
         self.relogio: pygame.time.Clock = pygame.time.Clock()
 
@@ -87,8 +102,8 @@ class JogoRotaAcessivel:
             self.fonte_grande,
         )
         self.retrato_morador_atual: pygame.Surface = self.morador.obter_retrato(40)
+        self.retrato_morador_grande: pygame.Surface = self.morador.obter_retrato(64)
 
-        # Único grupo que executa update(dt) e draw(tela) a cada frame
         self.grupo_desenho: pygame.sprite.Group = pygame.sprite.Group()
         self._reconstruir_grupo_desenho()
         self.ultimo_resumo_fase: Dict[str, object] = {}
@@ -173,6 +188,7 @@ class JogoRotaAcessivel:
         self.jogador.movimento_habilitado = True
         self.morador.definir_perfil(str(self.fases.metadados_atual["perfil_id"]))
         self.retrato_morador_atual = self.morador.obter_retrato(40)
+        self.retrato_morador_grande = self.morador.obter_retrato(64)
         self.morador.cancelar_teste()
         self.morador.reposicionar(*self.fases.inicio_morador)
         self._reconstruir_grupo_desenho()
@@ -228,46 +244,38 @@ class JogoRotaAcessivel:
         self._tocar_som("clique")
 
     def _iniciar_fase_especifica(self, indice: int) -> None:
-        """Carrega uma fase desbloqueada selecionada no Mapa Urbano.
-
-        Args:
-            indice: Índice baseado em zero da fase escolhida (0 a 3).
-        """
+        """Carrega uma fase desbloqueada e abre o popup amigável de apresentação."""
         if indice + 1 > self.save.fases_desbloqueadas():
             self._tocar_som("erro")
             return
         self.vitoria_campanha = False
         self.fases.carregar_fase(indice, self.modo_alto_contraste, self.fonte_grande)
         self._sincronizar_fase_atual()
-        self.estado = ESTADO_JOGANDO
-        self.hud.definir_feedback(
-            str(self.fases.metadados_atual["descricao"]),
-            "OK",
-            DURACAO_FEEDBACK,
-        )
+        self.estado = ESTADO_BRIEFING
 
     def _iniciar_nova_campanha(self) -> None:
-        """Inicia uma nova campanha a partir da Fase 1."""
+        """Inicia uma nova campanha na Fase 1 abrindo o popup de apresentação."""
         self.vitoria_campanha = False
         self.fases.reiniciar_campanha(self.modo_alto_contraste, self.fonte_grande)
         self._sincronizar_fase_atual()
-        self.estado = ESTADO_JOGANDO
-        self.hud.definir_feedback(
-            str(self.fases.metadados_atual["descricao"]),
-            "OK",
-            DURACAO_FEEDBACK,
-        )
+        self.estado = ESTADO_BRIEFING
 
     def _reiniciar_fase_atual(self) -> None:
-        """Reinicia integralmente a fase atual e retorna ao estado JOGANDO."""
+        """Reinicia integralmente a fase atual e abre o popup antes de começar."""
         self.fases.reiniciar_fase(self.modo_alto_contraste, self.fonte_grande)
         self._sincronizar_fase_atual()
-        self.estado = ESTADO_JOGANDO
+        self.estado = ESTADO_BRIEFING
         self._tocar_som("clique")
+
+    def _comecar_fase_apos_briefing(self) -> None:
+        """Inicia a fase de fato somente após o clique no botão 'Ajudar'."""
+        self._tocar_som("clique")
+        self.estado = ESTADO_JOGANDO
+        nome = str(self.fases.metadados_atual["nome_morador"])
         self.hud.definir_feedback(
-            f"Fase reiniciada — {self.fases.metadados_atual['descricao']}",
+            f"Vamos lá! Libere a rota para {nome} e aperte [ESPAÇO] quando estiver pronta.",
             "OK",
-            DURACAO_FEEDBACK,
+            4.0,
         )
 
     def _aplicar_intervencao(self) -> None:
@@ -314,7 +322,6 @@ class JogoRotaAcessivel:
             )
             self._tocar_som("acao")
 
-            # Caso de borda: alertar se o orçamento zerou com a rota ainda bloqueada
             if self.fases.recursos == 0:
                 sucesso_previa, _, _ = self.morador.calcular_rota(
                     self.fases.obter_grade_barreiras(),
@@ -366,13 +373,18 @@ class JogoRotaAcessivel:
             )
             if barreira_proxima is not None and barreira_proxima.rect.collidepoint(pos_mouse):
                 self._aplicar_intervencao()
+                return
+            if pos_mouse[1] >= HUD_ALTURA and not self.morador.em_movimento:
+                self.jogador.definir_destino_mouse(float(pos_mouse[0]), float(pos_mouse[1]))
             return
 
         acao = self.hud.obter_acao_clique(pos_mouse)
         if acao is None:
             return
 
-        if acao == "jogar":
+        if acao == "ajudar":
+            self._comecar_fase_apos_briefing()
+        elif acao == "jogar":
             self._tocar_som("clique")
             self._iniciar_nova_campanha()
         elif acao == "mapa":
@@ -455,6 +467,8 @@ class JogoRotaAcessivel:
                 self._evento_mapa(tecla)
             elif self.estado == ESTADO_CREDITOS:
                 self._evento_creditos(tecla)
+            elif self.estado == ESTADO_BRIEFING:
+                self._evento_briefing(tecla)
             elif self.estado == ESTADO_JOGANDO:
                 self._evento_jogando(tecla)
             elif self.estado == ESTADO_PAUSA:
@@ -518,6 +532,14 @@ class JogoRotaAcessivel:
             self._tocar_som("clique")
             self.estado = ESTADO_MENU
 
+    def _evento_briefing(self, tecla: int) -> None:
+        """Trata comandos no popup de apresentação antes da fase começar."""
+        if tecla in (pygame.K_RETURN, pygame.K_SPACE):
+            self._comecar_fase_apos_briefing()
+        elif tecla == pygame.K_ESCAPE:
+            self._tocar_som("clique")
+            self.estado = ESTADO_MENU
+
     def _evento_instrucoes(self, tecla: int) -> None:
         """Trata comandos de teclado no estado INSTRUCOES."""
         if tecla in (pygame.K_RETURN, pygame.K_SPACE):
@@ -559,12 +581,7 @@ class JogoRotaAcessivel:
             self._tocar_som("clique")
             if self.fases.avancar_fase(self.modo_alto_contraste, self.fonte_grande):
                 self._sincronizar_fase_atual()
-                self.estado = ESTADO_JOGANDO
-                self.hud.definir_feedback(
-                    str(self.fases.metadados_atual["descricao"]),
-                    "OK",
-                    DURACAO_FEEDBACK,
-                )
+                self.estado = ESTADO_BRIEFING
             else:
                 self.vitoria_campanha = True
                 self.estado = ESTADO_FIM
@@ -593,7 +610,6 @@ class JogoRotaAcessivel:
         self.fases.tempo_restante -= dt
         self.grupo_desenho.update(dt)
 
-        # Poeirinha suave nos pés quando Alex corre com SHIFT
         if self.jogador.correndo:
             self._temporizador_poeira += dt
             if self._temporizador_poeira >= 0.08:
@@ -655,18 +671,19 @@ class JogoRotaAcessivel:
 
             barreira = self.morador.barreira_bloqueadora
             self.barreira_ultimo_erro = barreira
+            nome_morador = str(self.fases.metadados_atual["nome_morador"])
             explicacao = (
                 barreira.mensagem_erro
                 if barreira is not None and barreira.mensagem_erro
-                else "Rota bloqueada! Remova obstáculos ou desvie de postes fixos."
+                else "Esse trecho ainda está bloqueado! Vamos ajustar o caminho."
             )
             dica_reinicio = (
-                " Sem recursos: pressione [R] para reiniciar a fase."
+                " Sem orçamento: aperte [R] para tentar de novo!"
                 if self.fases.recursos == 0
                 else ""
             )
             self.hud.definir_feedback(
-                f"{explicacao} (-{int(PENALIDADE_ERRO)}s){dica_reinicio}",
+                f"{nome_morador}: {explicacao} (-{int(PENALIDADE_ERRO)}s){dica_reinicio}",
                 "ERRO",
                 DURACAO_FEEDBACK,
             )
@@ -674,10 +691,61 @@ class JogoRotaAcessivel:
             if self.fases.tempo_restante <= 0.0:
                 self._tratar_fim_por_tempo()
 
+    def _desenhar_sprites_25d(self) -> None:
+        """Desenha os sprites do grupo_desenho com ordenação Y-Sort 2.5D.
+
+        Elementos planos de piso (rampa, piso_ok, piso_tatil, buraco, degrau,
+        destino) são desenhados primeiro; entidades 3D em pé (canteiros,
+        lixeiras, totens, Morador e Alex) são ordenadas por rect.bottom para
+        efeito real de profundidade.
+        """
+        tipos_piso = {
+            TIPO_RAMPA,
+            TIPO_PISO_OK,
+            TIPO_PISO_TATIL,
+            TIPO_SEM_PISO_TATIL,
+            TIPO_BURACO,
+            TIPO_DEGRAU,
+            TIPO_DESTINO,
+        }
+        piso = []
+        em_pe = []
+        for sprite in self.grupo_desenho:
+            tipo = getattr(sprite, "tipo", "")
+            if tipo in tipos_piso:
+                piso.append(sprite)
+            else:
+                em_pe.append(sprite)
+
+        for sprite in piso:
+            self.tela.blit(sprite.image, sprite.rect)
+
+        em_pe.sort(key=lambda sp: sp.rect.bottom)
+
+        if not self.modo_alto_contraste:
+            for sprite in em_pe:
+                if sprite.image.get_height() > TILE:
+                    ret_sombra = pygame.Rect(
+                        sprite.rect.x + 12,
+                        sprite.rect.bottom - 14,
+                        sprite.rect.width - 8,
+                        16,
+                    )
+                    pygame.draw.ellipse(self.tela, (156, 148, 136), ret_sombra)
+
+        for sprite in em_pe:
+            elevacao = sprite.image.get_height() - sprite.rect.height
+            self.tela.blit(sprite.image, (sprite.rect.x, sprite.rect.y - elevacao))
+
+        self.hud.desenhar_iluminacao_25d(self.tela, self.modo_alto_contraste)
+
     def _desenhar_cena_jogo(self) -> None:
-        """Desenha o cenário em cache, rastro do Morador, sprites, partículas e HUD."""
+        """Desenha o cenário 2.5D em cache, ambiente vivo, Y-Sort, partículas e HUD."""
         meta = self.fases.metadados_atual
         self.hud.desenhar_grade_calcada(
+            self.tela, int(meta["numero"]), self.modo_alto_contraste
+        )
+        self.hud.desenhar_ambiente_vivo(
             self.tela, int(meta["numero"]), self.modo_alto_contraste
         )
         self.hud.desenhar_rastro_morador(
@@ -686,7 +754,7 @@ class JogoRotaAcessivel:
             self.morador.rota_sucesso,
             self.modo_alto_contraste,
         )
-        self.grupo_desenho.draw(self.tela)
+        self._desenhar_sprites_25d()
         self.hud.desenhar_visao_barreiras(
             self.tela,
             self.fases.grupo_interativos,
@@ -758,6 +826,15 @@ class JogoRotaAcessivel:
             )
         elif self.estado == ESTADO_CREDITOS:
             self.hud.desenhar_creditos(self.tela, self.modo_alto_contraste)
+        elif self.estado == ESTADO_BRIEFING:
+            self._desenhar_cena_jogo()
+            self.hud.desenhar_briefing(
+                self.tela,
+                self.fases.metadados_atual,
+                self.fases.total_fases,
+                self.retrato_morador_grande,
+                self.modo_alto_contraste,
+            )
         elif self.estado == ESTADO_JOGANDO:
             self._desenhar_cena_jogo()
         elif self.estado == ESTADO_PAUSA:
@@ -784,9 +861,9 @@ class JogoRotaAcessivel:
             )
 
     def executar(self) -> None:
-        """Executa o Game Loop estrito: dt -> Eventos -> Update -> Regras -> Draw -> Flip."""
+        """Executa o Game Loop estrito com tick_busy_loop (zero jitter no Windows)."""
         while self.executando:
-            dt = min(self.relogio.tick(FPS) / 1000.0, DT_MAXIMO)
+            dt = min(self.relogio.tick_busy_loop(FPS) / 1000.0, DT_MAXIMO)
             self._processar_eventos()
             self._atualizar(dt)
             self._validar_regras()
