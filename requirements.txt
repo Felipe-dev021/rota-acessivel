@@ -1,0 +1,3 @@
+pygame-ce
+# Opcional para empacotamento em executável standalone:
+# pyinstaller
