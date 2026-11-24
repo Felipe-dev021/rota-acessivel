@@ -63,17 +63,15 @@ class Barreira(pygame.sprite.Sprite):
             "eh_solida": False,
             "bloqueia_morador": True,
             "alteravel": True,
-            "tipo_resolvido": None,  # Removida com self.kill()
+            "tipo_resolvido": None,
             "sprite": ARQUIVO_IMG_LIXEIRA,
             "sigla": "L",
             "rotulo_acao": "Deslocar Lixeira",
             "mensagem_sucesso": (
-                "Lixeira deslocada para a faixa de serviço! A faixa livre "
-                "agora está desobstruída (custo: 0 recursos)."
+                "Boa! Lixeira movida para a faixa de serviço — caminho livre! (0 rec)"
             ),
             "mensagem_erro": (
-                "Lixeira bloqueando a faixa livre! Mobiliário solto na área "
-                "de circulação impede a passagem segura de cadeiras de rodas."
+                "Ops! Essa lixeira está bem no meio da passagem. Mova ela com [E] (grátis)!"
             ),
         },
         TIPO_DEGRAU: {
@@ -86,12 +84,10 @@ class Barreira(pygame.sprite.Sprite):
             "sigla": "D",
             "rotulo_acao": "Instalar Rampa",
             "mensagem_sucesso": (
-                "Rampa acessível instalada no desnível! Agora pessoas em "
-                "cadeira de rodas podem cruzar com autonomia (custo: 1 rec)."
+                "Show! Rampa acessível instalada — agora dá para passar com autonomia! (1 rec)"
             ),
             "mensagem_erro": (
-                "Degrau sem rebaixamento! Desníveis acima de 2 cm bloqueiam "
-                "cadeiras de rodas e exigem rampa segura (ABNT NBR 9050)."
+                "Esse degrau sem rampa impediu minha passagem! Instale uma rampa ali (NBR 9050)."
             ),
         },
         TIPO_BURACO: {
@@ -104,12 +100,10 @@ class Barreira(pygame.sprite.Sprite):
             "sigla": "B",
             "rotulo_acao": "Nivelar Piso",
             "mensagem_sucesso": (
-                "Pavimento nivelado e regularizado! Agora a circulação é "
-                "segura para cadeiras de rodas e bengalas (custo: 1 rec)."
+                "Perfeito! Calçada nivelada e segura para rodas e bengalas! (1 rec)"
             ),
             "mensagem_erro": (
-                "Buraco no pavimento! Pisos danificados travam rodas e "
-                "oferecem alto risco de queda para quem usa bengala."
+                "Cuidado com esse buraco no piso! Ele trava rodas e oferece risco de queda."
             ),
         },
         TIPO_SEM_PISO_TATIL: {
@@ -122,12 +116,10 @@ class Barreira(pygame.sprite.Sprite):
             "sigla": "T",
             "rotulo_acao": "Instalar Piso Tátil",
             "mensagem_sucesso": (
-                "Piso tátil direcional instalado! Pessoas cegas ou com baixa "
-                "visão agora têm orientação segura no trecho (custo: 1 rec)."
+                "Ótimo! Piso tátil direcional instalado para guiar com segurança! (1 rec)"
             ),
             "mensagem_erro": (
-                "Trecho sem piso tátil! A ausência de sinalização tátil "
-                "direcional desorienta pessoas cegas ou com baixa visão (NBR 9050)."
+                "Falta piso tátil aqui! Sem ele fico sem referência segura para seguir (NBR 9050)."
             ),
         },
         TIPO_AVISO_SONORO: {
@@ -140,12 +132,10 @@ class Barreira(pygame.sprite.Sprite):
             "sigla": "S",
             "rotulo_acao": "Instalar Painel Visual",
             "mensagem_sucesso": (
-                "Painel visual acessível instalado! A informação agora é "
-                "sonora e visual, garantindo inclusão para pessoas surdas (custo: 1 rec)."
+                "Excelente! Painel visual ativo junto com o áudio — informação para todos! (1 rec)"
             ),
             "mensagem_erro": (
-                "Aviso exclusivamente sonoro! Informações sem suporte visual "
-                "excluem pessoas surdas ou com deficiência auditiva (LBI)."
+                "Esse aviso é só por som! Preciso de um painel visual para saber o caminho (LBI)."
             ),
         },
         TIPO_POSTE: {
@@ -156,11 +146,10 @@ class Barreira(pygame.sprite.Sprite):
             "tipo_resolvido": None,
             "sprite": ARQUIVO_IMG_POSTE,
             "sigla": "P",
-            "rotulo_acao": "Poste Fixo",
+            "rotulo_acao": "Canteiro Fixo",
             "mensagem_sucesso": "",
             "mensagem_erro": (
-                "Poste fixo no trajeto! Estruturas permanentes não podem ser "
-                "removidas — planeje uma rota contínua desviando deste ponto."
+                "Esse canteiro é fixo e fecha a passagem! Vamos planejar um caminho alternativo."
             ),
         },
         TIPO_RAMPA: {
@@ -266,8 +255,8 @@ class Barreira(pygame.sprite.Sprite):
         self._carregar_atributos_tipo(tipo)
 
         self.image: pygame.Surface = pygame.Surface((TILE, TILE), pygame.SRCALPHA)
-        self.rect: pygame.Rect = self.image.get_rect(
-            topleft=(round(self.pos_x), round(self.pos_y))
+        self.rect: pygame.Rect = pygame.Rect(
+            round(self.pos_x), round(self.pos_y), TILE, TILE
         )
         self.atualizar_visual(modo_alto_contraste, fonte_grande)
 
@@ -293,20 +282,14 @@ class Barreira(pygame.sprite.Sprite):
 
     @classmethod
     def _carregar_imagem_normal(cls, nome_arquivo: str) -> pygame.Surface:
-        """Carrega e armazena em cache o sprite PNG usando caminho_arquivo().
-
-        Args:
-            nome_arquivo: Nome do arquivo PNG dentro de data/.
-
-        Returns:
-            Superfície pygame no tamanho TILE x TILE.
-        """
+        """Carrega e armazena em cache o sprite PNG (48x48 piso ou 48x64 2.5D)."""
         if nome_arquivo not in cls._cache_imagens:
             superficie = pygame.image.load(caminho_arquivo(nome_arquivo))
             if pygame.display.get_surface() is not None:
                 superficie = superficie.convert_alpha()
-            if superficie.get_size() != (TILE, TILE):
-                superficie = pygame.transform.smoothscale(superficie, (TILE, TILE))
+            if superficie.get_width() != TILE:
+                nova_altura = max(TILE, round(superficie.get_height() * (TILE / superficie.get_width())))
+                superficie = pygame.transform.smoothscale(superficie, (TILE, nova_altura))
             cls._cache_imagens[nome_arquivo] = superficie
         return cls._cache_imagens[nome_arquivo]
 
@@ -397,7 +380,6 @@ class Barreira(pygame.sprite.Sprite):
         mensagem = self.mensagem_sucesso
 
         if self.tipo_resolvido is None:
-            # Obstáculo móvel (ex.: lixeira) removido da faixa livre
             self.bloqueia_morador = False
             self.alteravel = False
             self.kill()
