@@ -14,15 +14,20 @@ from typing import List
 import pygame
 
 from config import (
+    ARQUIVO_IMG_AVISO_SONORO,
     ARQUIVO_IMG_BURACO,
     ARQUIVO_IMG_DEGRAU,
     ARQUIVO_IMG_DESTINO,
     ARQUIVO_IMG_LIXEIRA,
     ARQUIVO_IMG_MORADOR,
+    ARQUIVO_IMG_PAINEL_VISUAL,
     ARQUIVO_IMG_PISO_OK,
+    ARQUIVO_IMG_PISO_TATIL,
     ARQUIVO_IMG_PLAYER,
     ARQUIVO_IMG_POSTE,
     ARQUIVO_IMG_RAMPA,
+    ARQUIVO_IMG_SEM_PISO_TATIL,
+    ARQUIVO_MUSICA_FUNDO,
     ARQUIVO_SOM_ACAO,
     ARQUIVO_SOM_CLIQUE,
     ARQUIVO_SOM_ERRO,
@@ -201,6 +206,65 @@ def _gerar_piso_ok() -> None:
     pygame.image.save(surf, caminho_arquivo(ARQUIVO_IMG_PISO_OK))
 
 
+def _gerar_sem_piso_tatil() -> None:
+    """Gera o sprite de trecho crítico sem sinalização tátil (acessibilidade visual)."""
+    surf = _criar_superficie()
+    pygame.draw.rect(surf, (152, 148, 168), (2, 2, 44, 44), border_radius=5)
+    pygame.draw.rect(surf, (124, 58, 237), (4, 4, 40, 40), 3, border_radius=4)
+    # Contorno tracejado sugerindo ausência de piso tátil direcional
+    for pos_y in (12, 24, 36):
+        pygame.draw.line(surf, (233, 213, 255), (10, pos_y), (18, pos_y), 3)
+        pygame.draw.line(surf, (233, 213, 255), (30, pos_y), (38, pos_y), 3)
+    # Ponto de interrogação/alerta central
+    pygame.draw.circle(surf, (88, 28, 135), (24, 24), 9)
+    pygame.draw.circle(surf, (250, 204, 21), (24, 24), 4)
+    pygame.draw.rect(surf, (59, 7, 100), (2, 2, 44, 44), 2, border_radius=5)
+    pygame.image.save(surf, caminho_arquivo(ARQUIVO_IMG_SEM_PISO_TATIL))
+
+
+def _gerar_piso_tatil() -> None:
+    """Gera o sprite de piso tátil direcional amarelo conforme ABNT NBR 9050."""
+    surf = _criar_superficie()
+    pygame.draw.rect(surf, (234, 179, 8), (2, 2, 44, 44), border_radius=5)
+    pygame.draw.rect(surf, (250, 204, 21), (5, 5, 38, 38), border_radius=3)
+    # Relevos direcionais paralelos característicos do piso tátil
+    for pos_y in (11, 19, 27, 35):
+        pygame.draw.rect(surf, (161, 98, 7), (8, pos_y, 32, 4), border_radius=2)
+        pygame.draw.rect(surf, (254, 240, 138), (8, pos_y, 32, 2), border_radius=1)
+    pygame.draw.rect(surf, (113, 63, 18), (2, 2, 44, 44), 2, border_radius=5)
+    pygame.image.save(surf, caminho_arquivo(ARQUIVO_IMG_PISO_TATIL))
+
+
+def _gerar_aviso_sonoro() -> None:
+    """Gera o sprite de ponto com aviso apenas sonoro (barreira para pessoas surdas)."""
+    surf = _criar_superficie()
+    pygame.draw.rect(surf, (217, 78, 18), (2, 2, 44, 44), border_radius=5)
+    pygame.draw.rect(surf, (249, 115, 22), (5, 5, 38, 38), border_radius=3)
+    # Silhueta de alto-falante branco + ondas sonoras
+    pygame.draw.polygon(surf, (255, 255, 255), [(10, 19), (17, 19), (25, 12), (25, 36), (17, 29), (10, 29)])
+    pygame.draw.arc(surf, (254, 240, 138), (22, 14, 12, 20), -math.pi / 3, math.pi / 3, 3)
+    pygame.draw.arc(surf, (254, 240, 138), (26, 10, 14, 28), -math.pi / 3, math.pi / 3, 3)
+    pygame.draw.rect(surf, (124, 45, 18), (2, 2, 44, 44), 2, border_radius=5)
+    pygame.image.save(surf, caminho_arquivo(ARQUIVO_IMG_AVISO_SONORO))
+
+
+def _gerar_painel_visual() -> None:
+    """Gera o sprite de painel visual acessível (comunicação visual + sonora)."""
+    surf = _criar_superficie()
+    pygame.draw.rect(surf, (14, 116, 144), (2, 2, 44, 44), border_radius=5)
+    # Tela informativa iluminada de alto contraste
+    pygame.draw.rect(surf, (15, 23, 42), (6, 8, 36, 26), border_radius=4)
+    pygame.draw.rect(surf, (56, 189, 248), (6, 8, 36, 26), 2, border_radius=4)
+    # Linhas luminosas simulando texto acessível e ícone de visualização
+    pygame.draw.rect(surf, (250, 204, 21), (10, 13, 28, 4), border_radius=1)
+    pygame.draw.rect(surf, (241, 245, 249), (10, 20, 20, 3), border_radius=1)
+    pygame.draw.rect(surf, (74, 222, 128), (10, 26, 24, 3), border_radius=1)
+    # Base do totem informativo
+    pygame.draw.rect(surf, (226, 232, 240), (19, 35, 10, 7), border_radius=2)
+    pygame.draw.rect(surf, (12, 74, 110), (2, 2, 44, 44), 2, border_radius=5)
+    pygame.image.save(surf, caminho_arquivo(ARQUIVO_IMG_PAINEL_VISUAL))
+
+
 def _gerar_destino() -> None:
     """Gera o sprite do ponto de chegada com padrão quadriculado e borda dourada."""
     surf = _criar_superficie()
@@ -259,8 +323,55 @@ def _gerar_tom(frequencia: float, duracao: float, amplitude: float = 0.48) -> Li
     return amostras
 
 
+def _gerar_acorde_suave(
+    frequencias: List[float],
+    duracao: float,
+    amplitude: float = 0.16,
+) -> List[float]:
+    """Gera um acorde instrumental calmo com ataque e decaimento sem estalos.
+
+    Args:
+        frequencias: Lista de frequências em Hz que compõem o acorde.
+        duracao: Duração do acorde em segundos.
+        amplitude: Amplitude total suave para música de fundo.
+
+    Returns:
+        Lista de amostras normalizadas entre -1.0 e 1.0.
+    """
+    total = int(AUDIO_SAMPLE_RATE * duracao)
+    amostras: List[float] = []
+    divisor = max(1, len(frequencias))
+    for indice in range(total):
+        tempo = indice / AUDIO_SAMPLE_RATE
+        ataque = min(1.0, indice / max(1, int(total * 0.12)))
+        decaimento = min(1.0, (total - indice) / max(1, int(total * 0.15)))
+        envelope = ataque * decaimento
+        soma = 0.0
+        for freq in frequencias:
+            # Fundamental + leve harmônico suave para timbre de piano elétrico
+            soma += math.sin(2.0 * math.pi * freq * tempo) * 0.85
+            soma += math.sin(2.0 * math.pi * (freq * 2.0) * tempo) * 0.15
+        amostras.append((soma / divisor) * amplitude * envelope)
+    return amostras
+
+
+def _gerar_musica_fundo() -> None:
+    """Gera uma trilha instrumental calma em loop sem estalo em data/musica.wav."""
+    # Progressão calma e acolhedora: Cmaj7 -> Am7 -> Fmaj7 -> G6 (8 segundos em loop)
+    progressao = [
+        [261.63, 329.63, 392.00, 493.88],
+        [220.00, 261.63, 329.63, 392.00],
+        [174.61, 220.00, 261.63, 329.63],
+        [196.00, 246.94, 293.66, 329.63],
+    ]
+    trilha: List[float] = []
+    for acorde in progressao:
+        trilha.extend(_gerar_acorde_suave(acorde, duracao=2.0, amplitude=0.18))
+    _salvar_wav(ARQUIVO_MUSICA_FUNDO, trilha)
+
+
 def _gerar_audios() -> None:
-    """Gera os quatro efeitos sonoros WAV iniciais em data/."""
+    """Gera os quatro efeitos sonoros WAV e a trilha sonora calma em data/."""
     # acao.wav: confirmação positiva em dois tons ascendentes
     som_acao = _gerar_tom(523.25, 0.08, 0.45) + _gerar_tom(783.99, 0.12, 0.45)
     _salvar_wav(ARQUIVO_SOM_ACAO, som_acao)
@@ -282,9 +393,12 @@ def _gerar_audios() -> None:
     som_clique = _gerar_tom(660.0, 0.05, 0.35)
     _salvar_wav(ARQUIVO_SOM_CLIQUE, som_clique)
 
+    # musica.wav: trilha instrumental calma em loop
+    _gerar_musica_fundo()
+
 
 def gerar_todos_assets() -> None:
-    """Cria a pasta data/ e gera todos os sprites PNG e áudios WAV iniciais."""
+    """Cria a pasta data/ e gera todos os sprites PNG e áudios WAV do jogo."""
     os.makedirs(PASTA_DATA, exist_ok=True)
     pygame.init()
     try:
@@ -293,6 +407,10 @@ def gerar_todos_assets() -> None:
         _gerar_lixeira()
         _gerar_degrau()
         _gerar_buraco()
+        _gerar_sem_piso_tatil()
+        _gerar_piso_tatil()
+        _gerar_aviso_sonoro()
+        _gerar_painel_visual()
         _gerar_poste()
         _gerar_rampa()
         _gerar_piso_ok()

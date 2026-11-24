@@ -11,29 +11,39 @@ from typing import Dict, Optional, Tuple
 import pygame
 
 from config import (
+    ARQUIVO_IMG_AVISO_SONORO,
     ARQUIVO_IMG_BURACO,
     ARQUIVO_IMG_DEGRAU,
     ARQUIVO_IMG_DESTINO,
     ARQUIVO_IMG_LIXEIRA,
+    ARQUIVO_IMG_PAINEL_VISUAL,
     ARQUIVO_IMG_PISO_OK,
+    ARQUIVO_IMG_PISO_TATIL,
     ARQUIVO_IMG_POSTE,
     ARQUIVO_IMG_RAMPA,
+    ARQUIVO_IMG_SEM_PISO_TATIL,
     CORES_ALTO_CONTRASTE,
+    CUSTO_AVISO_SONORO,
     CUSTO_BURACO,
     CUSTO_DEGRAU,
     CUSTO_LIXEIRA,
+    CUSTO_SEM_PISO_TATIL,
     FONTE_FAMILIA,
     FONTES_GRANDE,
     FONTES_NORMAL,
     HUD_ALTURA,
     TILE,
+    TIPO_AVISO_SONORO,
     TIPO_BURACO,
     TIPO_DEGRAU,
     TIPO_DESTINO,
     TIPO_LIXEIRA,
+    TIPO_PAINEL_VISUAL,
     TIPO_PISO_OK,
+    TIPO_PISO_TATIL,
     TIPO_POSTE,
     TIPO_RAMPA,
+    TIPO_SEM_PISO_TATIL,
     caminho_arquivo,
 )
 
@@ -101,6 +111,42 @@ class Barreira(pygame.sprite.Sprite):
                 "dianteiras da cadeira de rodas e causam risco de tombamento."
             ),
         },
+        TIPO_SEM_PISO_TATIL: {
+            "custo": CUSTO_SEM_PISO_TATIL,
+            "eh_solida": False,
+            "bloqueia_morador": True,
+            "alteravel": True,
+            "tipo_resolvido": TIPO_PISO_TATIL,
+            "sprite": ARQUIVO_IMG_SEM_PISO_TATIL,
+            "sigla": "T",
+            "rotulo_acao": "Instalar Piso Tátil",
+            "mensagem_sucesso": (
+                "Piso tátil direcional instalado! Pessoas cegas ou com baixa "
+                "visão agora têm orientação segura no trecho (custo: 1 rec)."
+            ),
+            "mensagem_erro": (
+                "Trecho sem piso tátil! A ausência de sinalização tátil "
+                "direcional desorienta pessoas cegas ou com baixa visão (NBR 9050)."
+            ),
+        },
+        TIPO_AVISO_SONORO: {
+            "custo": CUSTO_AVISO_SONORO,
+            "eh_solida": False,
+            "bloqueia_morador": True,
+            "alteravel": True,
+            "tipo_resolvido": TIPO_PAINEL_VISUAL,
+            "sprite": ARQUIVO_IMG_AVISO_SONORO,
+            "sigla": "S",
+            "rotulo_acao": "Instalar Painel Visual",
+            "mensagem_sucesso": (
+                "Painel visual acessível instalado! A informação agora é "
+                "sonora e visual, garantindo inclusão para pessoas surdas (custo: 1 rec)."
+            ),
+            "mensagem_erro": (
+                "Aviso exclusivamente sonoro! Informações sem suporte visual "
+                "excluem pessoas surdas ou com deficiência auditiva (LBI)."
+            ),
+        },
         TIPO_POSTE: {
             "custo": 0,
             "eh_solida": True,
@@ -137,6 +183,30 @@ class Barreira(pygame.sprite.Sprite):
             "sprite": ARQUIVO_IMG_PISO_OK,
             "sigla": "OK",
             "rotulo_acao": "Piso Nivelado",
+            "mensagem_sucesso": "",
+            "mensagem_erro": "",
+        },
+        TIPO_PISO_TATIL: {
+            "custo": 0,
+            "eh_solida": False,
+            "bloqueia_morador": False,
+            "alteravel": False,
+            "tipo_resolvido": None,
+            "sprite": ARQUIVO_IMG_PISO_TATIL,
+            "sigla": "OK",
+            "rotulo_acao": "Piso Tátil",
+            "mensagem_sucesso": "",
+            "mensagem_erro": "",
+        },
+        TIPO_PAINEL_VISUAL: {
+            "custo": 0,
+            "eh_solida": False,
+            "bloqueia_morador": False,
+            "alteravel": False,
+            "tipo_resolvido": None,
+            "sprite": ARQUIVO_IMG_PAINEL_VISUAL,
+            "sigla": "OK",
+            "rotulo_acao": "Painel Visual",
             "mensagem_sucesso": "",
             "mensagem_erro": "",
         },

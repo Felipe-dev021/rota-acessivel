@@ -13,11 +13,13 @@ import pygame
 
 from config import (
     ALTURA,
+    ARQUIVO_MUSICA_FUNDO,
     ARQUIVO_SOM_ACAO,
     ARQUIVO_SOM_CLIQUE,
     ARQUIVO_SOM_ERRO,
     ARQUIVO_SOM_VITORIA,
     AUDIO_VOLUME_EFEITOS,
+    AUDIO_VOLUME_MUSICA,
     DT_MAXIMO,
     DURACAO_FEEDBACK,
     ESTADO_FIM,
@@ -53,9 +55,11 @@ class JogoRotaAcessivel:
         self.estado: str = ESTADO_MENU
         self.modo_alto_contraste: bool = False
         self.audio_ativo: bool = True
+        self.musica_ativa: bool = True
         self.vitoria_campanha: bool = False
 
         self.sons: Dict[str, Optional[pygame.mixer.Sound]] = self._carregar_sons()
+        self._iniciar_musica_fundo()
         self.hud: HUD = HUD()
         self.particulas: SistemaParticulas = SistemaParticulas()
         self.fases: GerenciadorFases = GerenciadorFases()
@@ -102,6 +106,32 @@ class JogoRotaAcessivel:
             return sons
         return sons
 
+    def _iniciar_musica_fundo(self) -> None:
+        """Carrega e inicia a trilha sonora calma em loop via pygame.mixer.music."""
+        try:
+            if not pygame.mixer.get_init():
+                return
+            pygame.mixer.music.load(caminho_arquivo(ARQUIVO_MUSICA_FUNDO))
+            pygame.mixer.music.set_volume(
+                AUDIO_VOLUME_MUSICA if (self.audio_ativo and self.musica_ativa) else 0.0
+            )
+            pygame.mixer.music.play(-1)
+        except pygame.error:
+            pass
+
+    def _atualizar_volume_musica(self) -> None:
+        """Sincroniza o volume da trilha de fundo com audio_ativo e musica_ativa."""
+        try:
+            if pygame.mixer.get_init():
+                volume = (
+                    AUDIO_VOLUME_MUSICA
+                    if (self.audio_ativo and self.musica_ativa)
+                    else 0.0
+                )
+                pygame.mixer.music.set_volume(volume)
+        except pygame.error:
+            pass
+
     def _tocar_som(self, chave: str) -> None:
         """Reproduz o efeito sonoro informado se o áudio estiver ativo.
 
@@ -141,8 +171,9 @@ class JogoRotaAcessivel:
         self._tocar_som("clique")
 
     def _alternar_audio(self) -> None:
-        """Ativa ou silencia todos os efeitos sonoros do jogo."""
+        """Ativa ou silencia todos os efeitos sonoros e a trilha de fundo."""
         self.audio_ativo = not self.audio_ativo
+        self._atualizar_volume_musica()
         if self.audio_ativo:
             self._tocar_som("clique")
 
